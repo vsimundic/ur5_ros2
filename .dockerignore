@@ -1,0 +1,31 @@
+# Version-control metadata
+.git/
+.gitignore
+
+# Colcon outputs
+ur5_ws/build/
+ur5_ws/install/
+ur5_ws/log/
+
+# Python and test caches
+**/__pycache__/
+**/*.py[cod]
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+
+# Editor and OS metadata
+.idea/
+.vscode/
+**/*.swp
+**/*~
+.DS_Store
+
+# Runtime data and large generated artifacts
+**/*.bag
+**/*.db3
+**/*.mcap
+**/*.log
+**/core
+**/core.*
+docker/*.tar
