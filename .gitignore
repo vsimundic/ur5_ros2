@@ -3,3 +3,6 @@ build/
 install/
 log/
 models/
+__pycache__/
+*.py[cod]
+.agents/

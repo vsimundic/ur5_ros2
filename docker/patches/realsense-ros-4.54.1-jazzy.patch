@@ -1,0 +1,63 @@
+diff --git a/realsense2_camera/CMakeLists.txt b/realsense2_camera/CMakeLists.txt
+index 188e9dc..03a3ea8 100644
+--- a/realsense2_camera/CMakeLists.txt
++++ b/realsense2_camera/CMakeLists.txt
+@@ -168,6 +168,10 @@ elseif("$ENV{ROS_DISTRO}" STREQUAL "iron")
+   message(STATUS "Build for ROS2 Iron")
+   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DIRON")
+   set(SOURCES "${SOURCES}" src/ros_param_backend_foxy.cpp)
++elseif("$ENV{ROS_DISTRO}" STREQUAL "jazzy")
++  message(STATUS "Build for ROS2 Jazzy")
++  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DJAZZY")
++  set(SOURCES "${SOURCES}" src/ros_param_backend_rolling.cpp)
+ elseif("$ENV{ROS_DISTRO}" STREQUAL "rolling")
+   message(STATUS "Build for ROS2 Rolling")
+   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DROLLING")
+diff --git a/realsense2_camera/launch/rs_launch.py b/realsense2_camera/launch/rs_launch.py
+index db633ea..6bdb103 100644
+--- a/realsense2_camera/launch/rs_launch.py
++++ b/realsense2_camera/launch/rs_launch.py
+@@ -21,7 +21,8 @@ from launch.actions import DeclareLaunchArgument, OpaqueFunction
+ from launch.substitutions import LaunchConfiguration
+ 
+ 
+-configurable_parameters = [{'name': 'camera_name',                  'default': 'camera', 'description': 'camera unique name'},
++configurable_parameters = [{'name': 'camera_namespace',             'default': 'camera', 'description': 'camera namespace'},
++                           {'name': 'camera_name',                  'default': 'camera', 'description': 'camera unique name'},
+                            {'name': 'serial_no',                    'default': "''", 'description': 'choose device by serial number'},
+                            {'name': 'usb_port_id',                  'default': "''", 'description': 'choose device by usb port id'},
+                            {'name': 'device_type',                  'default': "''", 'description': 'choose device by type'},
+@@ -59,6 +60,8 @@ configurable_parameters = [{'name': 'camera_name',                  'default': '
+                            {'name': 'allow_no_texture_points',      'default': 'false', 'description': "''"},                           
+                            {'name': 'pointcloud.ordered_pc',        'default': 'false', 'description': ''},
+                            {'name': 'publish_tf',                   'default': 'true', 'description': '[bool] enable/disable publishing static & dynamic TF'},
++                           {'name': 'base_frame_id',                'default': 'link', 'description': 'camera base frame suffix'},
++                           {'name': 'tf_prefix',                    'default': "''", 'description': 'frame prefix'},
+                            {'name': 'tf_publish_rate',              'default': '0.0', 'description': '[double] rate in Hz for publishing dynamic TF'},
+                            {'name': 'diagnostics_period',           'default': '0.0', 'description': 'Rate of publishing diagnostics. 0=Disabled'},
+                            {'name': 'decimation_filter.enable',     'default': 'false', 'description': 'Rate of publishing static_tf'},
+@@ -109,7 +112,7 @@ def launch_setup(context, *args, **kwargs):
+         return [
+             launch_ros.actions.Node(
+                 package='realsense2_camera',
+-                namespace=LaunchConfiguration("camera_name"),
++                namespace=LaunchConfiguration("camera_namespace"),
+                 name=LaunchConfiguration("camera_name"),
+                 executable='realsense2_camera_node',
+                 parameters=[set_configurable_parameters(configurable_parameters)
+diff --git a/realsense2_camera/src/parameters.cpp b/realsense2_camera/src/parameters.cpp
+index 3a2ef1c..927c871 100644
+--- a/realsense2_camera/src/parameters.cpp
++++ b/realsense2_camera/src/parameters.cpp
+@@ -27,6 +27,11 @@ void BaseRealSenseNode::getParameters()
+     _camera_name = _parameters->setParam<std::string>(param_name, "camera");
+     _parameters_names.push_back(param_name);
+ 
++    param_name = std::string("tf_prefix");
++    const auto tf_prefix = _parameters->setParam<std::string>(param_name, "");
++    _camera_name = tf_prefix + _camera_name;
++    _parameters_names.push_back(param_name);
++
+     param_name = std::string("publish_tf");
+     _publish_tf = _parameters->setParam<bool>(param_name, PUBLISH_TF);
+     _parameters_names.push_back(param_name);

@@ -1,0 +1,15 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="robotiq_3f_calibration">
+  <xacro:include filename="$(find robotiq_3f_description)/urdf/robotiq_3f.xacro"/>
+
+  <link name="world"/>
+  <xacro:robotiq_3f_gripper
+    parent="world"
+    prefix=""
+    include_cable_plugs="true"
+    articulated="true"
+    calibrate_middle_pivots="true">
+    <!-- Orient the palm vertically for convenient side/front inspection. -->
+    <origin xyz="0 0 0.15" rpy="0 0 0"/>
+  </xacro:robotiq_3f_gripper>
+</robot>

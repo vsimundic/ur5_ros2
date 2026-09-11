@@ -1,0 +1,51 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:macro name="l515_rgbd_sim" params="parent prefix:=''">
+    <!-- Aggregate transform measured from the installed camera driver. -->
+    <link name="${prefix}camera_color_optical_frame"/>
+    <joint name="${prefix}camera_color_optical_joint" type="fixed">
+      <parent link="${parent}"/>
+      <child link="${prefix}camera_color_optical_frame"/>
+      <origin
+        xyz="0.0045189945958554745 0.00022442915360443294 0.014033393003046513"
+        rpy="-1.5434393555067794 0.007417801057174378 -1.5660545858484607"/>
+    </joint>
+
+    <gazebo reference="${parent}">
+      <sensor name="l515_rgbd" type="rgbd_camera">
+        <!-- Gazebo cameras use X-forward; this correction preserves the
+             measured ROS optical-frame orientation after optical conversion. -->
+        <pose>
+          0.0045189945958554745 0.00022442915360443294 0.014033393003046513
+          0.0074205775766447556 -0.027356218461877857 0.0045387636007872684
+        </pose>
+        <always_on>true</always_on>
+        <update_rate>30</update_rate>
+        <visualize>false</visualize>
+        <topic>/camera/sim_rgbd</topic>
+        <camera>
+          <camera_info_topic>/camera/sim_rgbd/camera_info</camera_info_topic>
+          <horizontal_fov>1.2217304763960306</horizontal_fov>
+          <image>
+            <width>640</width>
+            <height>480</height>
+            <format>R8G8B8</format>
+          </image>
+          <clip>
+            <!-- The RGB imager can see the nearby fingers. Keep the L515
+                 minimum depth range on the depth channel below. -->
+            <near>0.01</near>
+            <far>9.0</far>
+          </clip>
+          <depth_camera>
+            <clip>
+              <near>0.25</near>
+              <far>9.0</far>
+            </clip>
+          </depth_camera>
+          <optical_frame_id>${prefix}camera_color_optical_frame</optical_frame_id>
+        </camera>
+      </sensor>
+    </gazebo>
+  </xacro:macro>
+</robot>

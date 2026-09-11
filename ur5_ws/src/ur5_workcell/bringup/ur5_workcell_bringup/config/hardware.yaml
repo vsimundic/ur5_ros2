@@ -1,0 +1,92 @@
+# Installed defaults for the reusable workcell bringup.
+#
+# The current cell addresses are verified active defaults. Launch arguments can
+# still override them for diagnostics or a different installation.
+robot:
+  ur_type: ur5
+  robot_ip: 192.168.88.245
+  reverse_ip: 0.0.0.0
+  tf_prefix: ""
+  safety_limits: true
+  safety_pos_margin: 0.15
+  safety_k_position: 20
+  use_mock_hardware: false
+  mock_sensor_commands: false
+  headless_mode: false
+  initial_joint_controller: scaled_joint_trajectory_controller
+  launch_dashboard_client: false
+  launch_rviz: true
+  controller_spawner_timeout: 10
+
+# These are retained for migration reference only. Do not use them until the
+# current cell networking has been checked.
+legacy_network_reference:
+  robot_ip: 192.168.88.245
+  pc_ip: 192.168.88.249
+  ft_tcp_port: 63351
+  gripper_ip: 192.168.22.11
+  gripper_modbus_tcp_port: 502
+
+# The FT streamer, verified gripper, and camera are part of this cell's current
+# bringup defaults. Launch still sends no robot or gripper motion command.
+peripherals:
+  launch_ft_sensor: true
+  launch_gripper: true
+  launch_camera: true
+
+# MoveIt is opt-in; the active trajectory controller is available to execute
+# plans when MoveIt is launched.
+moveit:
+  launch: false
+  launch_rviz: true
+
+# Mounted L515. The wrapper's camera_name + base_frame_id produce
+# `camera_link`, which is already attached to tool0 by the authoritative URDF.
+# The wrapper owns only the downstream sensor and optical transforms.
+camera:
+  # This patched wrapper publishes streams relative to its node namespace.
+  # `/camera` preserves the legacy /camera/* topic interface; the resulting
+  # node name is /camera/camera.
+  camera_namespace: /camera
+  camera_name: camera
+  serial_no: ""
+  device_type: L515
+  initial_reset: false
+  color_profile: 640x480x30
+  depth_profile: 640x480x30
+  enable_color: true
+  enable_depth: true
+  align_depth: true
+  pointcloud: false
+  publish_tf: true
+  base_frame_id: link
+  diagnostics_period: 2.0
+
+# The FT sensor is reached through the UR controller. It is not the serial/USB
+# ros2_control device included in the copied ros2_robotiq packages.
+ft_sensor:
+  sensor_port: 63351
+  frame_id: ft_measurement_frame
+  wrench_topic: /robotiq_ft_sensor/wrench
+  publish_rate_hz: 100.0
+  startup_zero: false
+  zero_sample_count: 100
+
+# Current verified gripper connection. Launch and reconnect send no command.
+gripper:
+  gripper_ip: "192.168.88.237"
+  port: 502
+  unit_id: 0
+  poll_rate_hz: 10.0
+  allow_automatic_release: false
+  launch_joint_state_publisher: true
+  publish_reference_without_status: true
+  # Pinch effective travel from the recorded samples: raw 0 = 0.155 m open,
+  # raw 112 = 0 m closed. Higher requests produce no additional closure.
+  gripper_command_closed_position_m: 0.0
+  gripper_command_max_opening_m: 0.155
+  gripper_command_closed_raw: 112
+  gripper_command_min_effort_n: 15.0
+  gripper_command_max_effort_n: 60.0
+  gripper_command_default_effort_n: 30.0
+  gripper_command_speed: 20

@@ -1,0 +1,38 @@
+camera_extrinsics:
+  calibration_date: 2026-07-24
+  camera_model: Intel RealSense L515
+  camera_serial: "f1062071"
+  calibrated_parent_frame: tool0
+  calibrated_child_frame: camera_color_optical_frame
+
+  source:
+    host_path: /home/robot/projects/ur5-door-interaction/data/Exp-camera-extrinsic-calibration-20260724/T_C_6.npy
+    container_path: /opt/reference/ur5-door-interaction/data/Exp-camera-extrinsic-calibration-20260724/T_C_6.npy
+    sha256: 4ed050f3ac3e4cc61c20c2329a5384fe0ca99092353c3035f9011c89b292d841
+    note: >-
+      Despite its legacy T_C_6 name, the user confirmed that this matrix is
+      the camera color optical-frame pose expressed in tool0.
+
+  # The source 3x3 block contains a uniform calibration scale. Legacy
+  # consumers removed this scale before treating the matrix as a rigid pose.
+  rotation_scale: 0.98028980358769924
+  raw_similarity_matrix:
+    - [-0.70409057701510236, -0.63501264798572521, -0.24896484746788514, 0.10523242270356938]
+    - [0.68200587759203579, -0.65039862199060183, -0.26984757634756129, 0.10499250488719132]
+    - [0.0096198392121074495, -0.36702679524646892, 0.90893723066152954, 0.098000544925158861]
+    - [0.0, 0.0, 0.0, 1.0]
+  normalized_tool0_to_color_optical_matrix:
+    - [-0.71824737382582871, -0.64778052945331421, -0.25397065904053556, 0.10523242270356938]
+    - [0.69571862840560683, -0.66347586153630278, -0.27527326649727824, 0.10499250488719132]
+    - [0.0098132605040881001, -0.37440641930907709, 0.92721277660439694, 0.098000544925158861]
+    - [0.0, 0.0, 0.0, 1.0]
+
+  # Read from the running pinned RealSense stack for this physical camera.
+  camera_link_to_color_optical:
+    xyz: [0.0045189945958554745, 0.00022442915360443294, 0.014033393003046513]
+    quaternion_xyzw: [-0.49240334307269262, 0.49382440651223558, -0.50375257733402234, 0.50981344047897059]
+
+  # normalized(tool0 -> optical) * inverse(camera_link -> optical)
+  derived_tool0_to_camera_link:
+    xyz: [0.097251011716225577, 0.097331529561805699, 0.088253015212700736]
+    rpy: [-0.021097885222406337, -1.1596787337810714, -2.329617429300598]

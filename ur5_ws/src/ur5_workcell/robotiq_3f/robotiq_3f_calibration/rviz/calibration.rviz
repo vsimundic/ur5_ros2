@@ -1,0 +1,90 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+  - Class: rviz_common/Views
+    Name: Views
+Visualization Manager:
+  Class: ""
+  Displays:
+    - Alpha: 0.35
+      Cell Size: 0.02
+      Class: rviz_default_plugins/Grid
+      Color: 120; 120; 125
+      Enabled: true
+      Name: 20 mm grid
+      Plane: YZ
+      Plane Cell Count: 30
+      Reference Frame: world
+    - Alpha: 1
+      Class: rviz_default_plugins/RobotModel
+      Collision Enabled: false
+      Description Source: Topic
+      Description Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robot_description
+      Enabled: true
+      Name: Robotiq 3F
+      Update Interval: 0
+      Visual Enabled: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Marker Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robotiq_3f/calibration/measurement_markers
+      Name: Measurements
+      Namespaces:
+        measurement: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Marker Topic:
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robotiq_3f/calibration/pivot_markers
+      Name: Adjustable pivot centers
+      Namespaces:
+        pivot_centers: true
+    - Class: rviz_default_plugins/TF
+      Enabled: false
+      Frame Timeout: 15
+      Marker Scale: 0.025
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: false
+  Enabled: true
+  Global Options:
+    Background Color: 42; 42; 42
+    Fixed Frame: world
+    Frame Rate: 30
+  Name: root
+  Tools:
+    - Class: rviz_default_plugins/Interact
+    - Class: rviz_default_plugins/MoveCamera
+    - Class: rviz_default_plugins/Select
+    - Class: rviz_default_plugins/PublishPoint
+      Single click: true
+      Topic: /clicked_point
+    - Class: rviz_default_plugins/Measure
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 0.45
+      Focal Point:
+        X: 0
+        Y: 0
+        Z: 0.15
+      Name: Current View
+      Pitch: 0.35
+      Target Frame: world
+      Yaw: 0.8
+Window Geometry:
+  Height: 900
+  Width: 1300

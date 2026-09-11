@@ -1,0 +1,47 @@
+- ros_topic_name: /camera/color/image_raw
+  gz_topic_name: /camera/sim_rgbd/image
+  ros_type_name: sensor_msgs/msg/Image
+  gz_type_name: gz.msgs.Image
+  direction: GZ_TO_ROS
+  lazy: false
+  frame_id: camera_color_optical_frame
+
+- ros_topic_name: /camera/aligned_depth_to_color/image_raw
+  gz_topic_name: /camera/sim_rgbd/depth_image
+  ros_type_name: sensor_msgs/msg/Image
+  gz_type_name: gz.msgs.Image
+  direction: GZ_TO_ROS
+  lazy: false
+  frame_id: camera_color_optical_frame
+
+- ros_topic_name: /camera/depth/image_rect_raw
+  gz_topic_name: /camera/sim_rgbd/depth_image
+  ros_type_name: sensor_msgs/msg/Image
+  gz_type_name: gz.msgs.Image
+  direction: GZ_TO_ROS
+  lazy: false
+  frame_id: camera_color_optical_frame
+
+- ros_topic_name: /camera/color/camera_info
+  gz_topic_name: /camera/sim_rgbd/camera_info
+  ros_type_name: sensor_msgs/msg/CameraInfo
+  gz_type_name: gz.msgs.CameraInfo
+  direction: GZ_TO_ROS
+  lazy: false
+  frame_id: camera_color_optical_frame
+
+- ros_topic_name: /camera/aligned_depth_to_color/camera_info
+  gz_topic_name: /camera/sim_rgbd/camera_info
+  ros_type_name: sensor_msgs/msg/CameraInfo
+  gz_type_name: gz.msgs.CameraInfo
+  direction: GZ_TO_ROS
+  lazy: false
+  frame_id: camera_color_optical_frame
+
+- ros_topic_name: /camera/depth/camera_info
+  gz_topic_name: /camera/sim_rgbd/camera_info
+  ros_type_name: sensor_msgs/msg/CameraInfo
+  gz_type_name: gz.msgs.CameraInfo
+  direction: GZ_TO_ROS
+  lazy: false
+  frame_id: camera_color_optical_frame

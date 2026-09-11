@@ -27,7 +27,6 @@ fi
 docker run \
     --interactive \
     --tty \
-    --ipc=host \
     --network=host \
     --gpus="${GPU_REQUEST}" \
     --env="DISPLAY=${DISPLAY:-}" \
@@ -41,6 +40,7 @@ docker run \
     --ulimit=rtprio=99 \
     --ulimit=memlock=-1 \
     --volume=/tmp/.X11-unix:/tmp/.X11-unix:rw \
+    --volume=/dev/bus/usb:/dev/bus/usb:rw \
     --volume=/usr/share/vulkan/icd.d:/usr/share/vulkan/icd.d:ro \
     --volume="${PROJECT_ROOT}:${CONTAINER_WS}" \
     --mount="type=bind,source=${LEGACY_PROJECT_HOST},target=${LEGACY_PROJECT_CONTAINER},readonly" \
