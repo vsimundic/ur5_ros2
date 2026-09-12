@@ -12,6 +12,7 @@ from .models import (
     Board,
     Cube,
     CubeKind,
+    GameCoordinate,
     GameMode,
     GameRound,
     GridCell,
@@ -57,15 +58,20 @@ class RoundGenerator:
         )
 
     def origin_cells(self, mode: GameMode) -> Sequence[GridCell]:
-        """Return every legal origin for a mode under current configuration."""
-        if mode is not GameMode.STANDARD:
-            return self._board.cells()
-        margin = self._settings.game.standard.central_origin_margin_cells
-        return tuple(
-            GridCell(column, row)
-            for row in range(margin, self._board.rows - margin)
-            for column in range(margin, self._board.columns - margin)
-        )
+        """Return legal origins for the selected educational mode."""
+        if mode in (GameMode.EASY, GameMode.BEGINNER):
+            return ()
+        if mode is GameMode.SPATIAL:
+            spatial = self._settings.game.spatial
+            return (GridCell(spatial.origin_column, spatial.origin_row),)
+        if mode is GameMode.STANDARD:
+            margin = self._settings.game.standard.central_origin_margin_cells
+            return tuple(
+                GridCell(column, row)
+                for row in range(margin, self._board.rows - margin)
+                for column in range(margin, self._board.columns - margin)
+            )
+        return self._board.cells()
 
     def _orientation(
         self, mode: GameMode, generator: random.Random
@@ -81,7 +87,7 @@ class RoundGenerator:
         return rotation, generator.choice(handednesses)
 
     def _choose_cube_cells(
-        self, origin: GridCell, generator: random.Random
+        self, origin: GridCell | None, generator: random.Random
     ) -> tuple[GridCell, ...] | None:
         candidates = [cell for cell in self._board.cells() if cell != origin]
         generator.shuffle(candidates)
@@ -97,7 +103,7 @@ class RoundGenerator:
     def _make_cubes(
         self,
         cells: Sequence[GridCell],
-        origin: GridCell,
+        origin: GridCell | None,
         rotation: QuarterTurn,
         handedness: Handedness,
         generator: random.Random,
@@ -105,21 +111,18 @@ class RoundGenerator:
         cells = list(cells)
         generator.shuffle(cells)
         cubes = []
-        for index in range(self._settings.game.cubes.red_count):
+        kinds = (
+            CubeKind.RED, CubeKind.GREEN, CubeKind.BLUE,
+            CubeKind.BLACK, CubeKind.WHITE,
+        )
+        for index, kind in enumerate(kinds):
             cell = cells[index]
-            cubes.append(Cube(
-                f'red_{index + 1}',
-                CubeKind.RED,
-                cell,
-                grid_to_game(cell, origin, rotation, handedness),
-            ))
-        green_cell = cells[-1]
-        cubes.append(Cube(
-            'green_1',
-            CubeKind.GREEN,
-            green_cell,
-            grid_to_game(green_cell, origin, rotation, handedness),
-        ))
+            coordinate = (
+                GameCoordinate(cell.column, cell.row)
+                if origin is None
+                else grid_to_game(cell, origin, rotation, handedness)
+            )
+            cubes.append(Cube(f'{kind.value}_1', kind, cell, coordinate))
         return tuple(cubes)
 
     def _meets_required_signs(self, signs: set[str]) -> bool:
@@ -141,10 +144,15 @@ class RoundGenerator:
             raise TypeError('seed must be an integer or None')
         generator = random.Random(actual_seed)
         origins = self.origin_cells(mode)
-        best: tuple[int, GridCell, QuarterTurn, Handedness, tuple[Cube, ...]] | None = None
+        coordinate_round = mode in (
+            GameMode.SPATIAL, GameMode.STANDARD, GameMode.CHALLENGE,
+        )
+        best: tuple[
+            int, GridCell | None, QuarterTurn, Handedness, tuple[Cube, ...]
+        ] | None = None
 
         for _ in range(self._settings.generation.maximum_attempts):
-            origin = generator.choice(origins)
+            origin = generator.choice(origins) if coordinate_round else None
             rotation, handedness = self._orientation(mode, generator)
             cube_cells = self._choose_cube_cells(origin, generator)
             if cube_cells is None:
@@ -152,14 +160,22 @@ class RoundGenerator:
             cubes = self._make_cubes(
                 cube_cells, origin, rotation, handedness, generator
             )
-            signs = _signs(cubes)
-            if not self._meets_required_signs(signs):
+            signs = _signs(cubes) if coordinate_round else set()
+            if coordinate_round and not self._meets_required_signs(signs):
                 continue
-            score = len(signs) if self._settings.generation.favor_coordinate_sign_variety else 0
+            score = (
+                len(signs)
+                if coordinate_round and self._settings.generation.favor_coordinate_sign_variety
+                else 0
+            )
             candidate = (score, origin, rotation, handedness, cubes)
             if best is None or score > best[0]:
                 best = candidate
-            if score == 4 or not self._settings.generation.favor_coordinate_sign_variety:
+            if (
+                score == 4
+                or not coordinate_round
+                or not self._settings.generation.favor_coordinate_sign_variety
+            ):
                 break
 
         if best is None:
@@ -169,9 +185,15 @@ class RoundGenerator:
         _, origin, rotation, handedness, cubes = best
         answer_ids = [cube.cube_id for cube in cubes]
         generator.shuffle(answer_ids)
-        beginner_target = generator.choice(answer_ids) if mode is GameMode.BEGINNER else None
+        target_id = (
+            'green_1'
+            if mode is GameMode.STANDARD
+            else generator.choice(answer_ids)
+        )
         identity = '|'.join([
-            str(actual_seed), mode.value, str(origin.column), str(origin.row),
+            str(actual_seed), mode.value,
+            '' if origin is None else str(origin.column),
+            '' if origin is None else str(origin.row),
             str(int(rotation)), handedness.value,
             *(f'{cube.cube_id}:{cube.cell.column},{cube.cell.row}' for cube in cubes),
         ])
@@ -184,8 +206,7 @@ class RoundGenerator:
             rotation=rotation,
             handedness=handedness,
             cubes=cubes,
-            green_cube_id='green_1',
+            target_cube_id=target_id,
             answer_order=tuple(answer_ids),
             attempts=self._settings.game.attempts,
-            beginner_target_cube_id=beginner_target,
         )

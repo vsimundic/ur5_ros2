@@ -22,7 +22,6 @@ from .state_machine import (
     GameStateMachine,
     InvalidTransition,
     PhysicalProgress,
-    SelectionDisposition,
 )
 
 
@@ -41,8 +40,10 @@ class GameManager:
         configuration_revision: str = 'unversioned',
         calibration_revision: str = '',
         event_writer: Optional[EventWriter] = None,
+        preflight: Optional[Callable[[], tuple[bool, str]]] = None,
     ) -> None:
         """Create an idle manager; construction neither contacts nor commands hardware."""
+        self._settings = settings
         self._generator = RoundGenerator(settings)
         self._machine = GameStateMachine()
         self._machine.ready()
@@ -50,10 +51,12 @@ class GameManager:
         self._configuration_revision = configuration_revision
         self._calibration_revision = calibration_revision
         self._event_writer = event_writer
+        self._preflight = preflight
         self._state_version = 0
         self._pending_request_id: Optional[str] = None
         self._receipts: set[str] = set()
         self._listeners: list[SnapshotListener] = []
+        self._motion_stage: Optional[str] = None
 
     @property
     def machine(self) -> GameStateMachine:
@@ -80,9 +83,22 @@ class GameManager:
         )
         error_code = self._error_code(self._machine.last_robot_error)
         progress = self._machine.physical_progress
-        beginner_target = (
-            None if game_round is None or game_round.beginner_target_cube_id is None
-            else game_round.cube(game_round.beginner_target_cube_id).game_coordinate
+        target_visual_kind = (
+            None
+            if game_round is None
+            or game_round.mode not in (
+                GameMode.EASY, GameMode.BEGINNER, GameMode.SPATIAL,
+                GameMode.CHALLENGE,
+            )
+            else game_round.cube(game_round.target_cube_id).kind
+        )
+        target_coordinate = (
+            None
+            if game_round is None
+            or game_round.mode not in (
+                GameMode.SPATIAL, GameMode.STANDARD, GameMode.CHALLENGE,
+            )
+            else game_round.cube(game_round.target_cube_id).game_coordinate
         )
         operation_state = (
             'reconciliation_required'
@@ -101,7 +117,8 @@ class GameManager:
             origin_cell=None if game_round is None else game_round.origin_cell,
             rotation_deg=None if game_round is None else int(game_round.rotation),
             handedness=None if game_round is None else game_round.handedness.value,
-            beginner_target_coordinate=beginner_target,
+            target_visual_kind=target_visual_kind,
+            target_coordinate=target_coordinate,
             cubes=cubes,
             answer_order=() if game_round is None else game_round.answer_order,
             selected_answer_ids=tuple(sorted(self._machine.selected_answers)),
@@ -110,6 +127,7 @@ class GameManager:
             operation_state=operation_state,
             pending_request_id=self._pending_request_id,
             pending_operation_id=self._machine.pending_operation_id,
+            motion_stage=self._motion_stage,
             game_flow_ready=self._machine.state is GameState.WAITING_FOR_CHILD,
             error_code=error_code,
             error_summary=self._machine.last_robot_error or '',
@@ -147,10 +165,17 @@ class GameManager:
             setup = self.request_physical_setup(f'{request_id}:setup', round_id)
             if not setup.accepted:
                 return setup
-        return self._round_transition(
+        result = self._round_transition(
             request_id, round_id, self._machine.confirm_physical_setup,
             'physical_setup_confirmed',
         )
+        if result.accepted and self._preflight is not None:
+            valid, error = self._preflight()
+            self.complete_preflight(valid, error)
+            return self._accept(False) if valid else self._reject(
+                request_id, ExecutionErrorCode.INVALID_STATE, error
+            )
+        return result
 
     def complete_preflight(self, valid: bool, error: str = 'PREFLIGHT_FAILED') -> None:
         """Accept a future internal preflight result; no hardware action occurs here."""
@@ -173,17 +198,15 @@ class GameManager:
             )
         operation_id = str(uuid4())
         try:
-            disposition = self._machine.submit_selection(cube_id, operation_id)
+            self._machine.submit_selection(cube_id, operation_id)
         except (KeyError, ValueError, InvalidTransition) as error:
             return self._reject(request_id, ExecutionErrorCode.INVALID_SELECTION, str(error))
-        if disposition is SelectionDisposition.EASY_HINT:
-            self._advance('selection_received', request_id, {'cube_id': cube_id, 'motion': False})
-            return self._accept(False)
         self._pending_request_id = request_id
+        self._motion_stage = 'PLANNING'
         game_round = self._machine.round
         assert game_round is not None
         cube = game_round.cube(cube_id)
-        destination_id = 'green_reward' if game_round.is_correct(cube_id) else 'red_drop'
+        destination_id, destination_policy = self._destination_for(game_round, cube_id)
         operation = OperationRequest(
             request_id=request_id,
             operation_id=operation_id,
@@ -191,7 +214,7 @@ class GameManager:
             cube_id=cube_id,
             cell=cube.cell,
             destination_id=destination_id,
-            destination_policy='configured_destination',
+            destination_policy=destination_policy,
             configuration_revision=self._configuration_revision,
             calibration_revision=self._calibration_revision,
         )
@@ -212,6 +235,7 @@ class GameManager:
         if result.operation_id != self._machine.pending_operation_id:
             return False
         succeeded = result.outcome is ExecutionOutcome.SUCCEEDED
+        self._motion_stage = None
         error = result.error_code.name if result.error_code is not ExecutionErrorCode.NONE else ''
         self._machine.complete_motion(succeeded, error, result.physical_progress)
         if succeeded:
@@ -224,11 +248,30 @@ class GameManager:
             elif self._machine.state is GameState.WAITING_FOR_CHILD:
                 event = 'wrong_answer_committed'
         else:
-            event = 'robot_error'
+            event = (
+                'cancellation'
+                if result.outcome is ExecutionOutcome.CANCELED else 'robot_error'
+            )
         self._advance(event, None, {
             'operation_id': result.operation_id,
             'outcome': result.outcome.name,
         })
+        if result.outcome is ExecutionOutcome.CANCELED:
+            self._advance('robot_error', None, {
+                'operation_id': result.operation_id,
+                'outcome': result.outcome.name,
+            })
+        return True
+
+    def handle_execution_feedback(self, operation_id: str, stage: str) -> bool:
+        """Publish stable application motion progress for an active operation only."""
+        if (
+            operation_id != self._machine.pending_operation_id
+            or self._machine.state is not GameState.EXECUTING_SELECTION
+        ):
+            return False
+        self._motion_stage = stage
+        self._advance('motion_stage', None, {'operation_id': operation_id, 'stage': stage})
         return True
 
     def retry_operation(
@@ -250,6 +293,7 @@ class GameManager:
         except InvalidTransition as error:
             return self._reject(request_id, ExecutionErrorCode.RECONCILIATION_REQUIRED, str(error))
         self._pending_request_id = request_id
+        self._motion_stage = 'PLANNING'
         operation = self._operation_for_pending(request_id)
         self._advance('retry_recovery', request_id, {'operation_id': operation.operation_id})
         try:
@@ -298,7 +342,43 @@ class GameManager:
         except InvalidTransition as error:
             return self._reject(request_id, ExecutionErrorCode.INVALID_STATE, str(error))
         self._pending_request_id = None
+        self._motion_stage = None
         self._advance('operator_abort', request_id, {})
+        return self._accept(False)
+
+    def reconcile_non_retryable(
+        self, request_id: str, round_id: str, operation_id: str, resolution: str
+    ) -> IntentResult:
+        """
+        Record a held/placed cube and close a round needing physical recovery.
+
+        The Phase 5 mock deliberately has no recovery motion.  A confirmation that
+        a cube is held, transported, or placed must never permit a blind re-pick.
+        """
+        duplicate = self._duplicate(request_id)
+        if duplicate is not None:
+            return duplicate
+        stale = self._check_round(request_id, round_id)
+        if stale is not None:
+            return stale
+        if operation_id != self._machine.pending_operation_id:
+            return self._reject(
+                request_id, ExecutionErrorCode.INVALID_STATE, 'operation is not pending'
+            )
+        if self._machine.state is not GameState.ROBOT_ERROR:
+            return self._reject(
+                request_id, ExecutionErrorCode.INVALID_STATE, 'operation is not in recovery'
+            )
+        self._advance('operator_reconciliation', request_id, {
+            'operation_id': operation_id, 'resolution': resolution,
+        })
+        self._machine.begin_abort()
+        self._machine.finish_abort()
+        self._pending_request_id = None
+        self._motion_stage = None
+        self._advance(
+            'operator_abort_after_reconciliation', request_id, {'resolution': resolution}
+        )
         return self._accept(False)
 
     def _operation_for_pending(self, request_id: str) -> OperationRequest:
@@ -307,7 +387,7 @@ class GameManager:
         operation_id = self._machine.pending_operation_id
         assert game_round is not None and cube_id is not None and operation_id is not None
         cube = game_round.cube(cube_id)
-        destination_id = 'green_reward' if game_round.is_correct(cube_id) else 'red_drop'
+        destination_id, destination_policy = self._destination_for(game_round, cube_id)
         return OperationRequest(
             request_id=request_id,
             operation_id=operation_id,
@@ -315,10 +395,18 @@ class GameManager:
             cube_id=cube_id,
             cell=cube.cell,
             destination_id=destination_id,
-            destination_policy='configured_destination',
+            destination_policy=destination_policy,
             configuration_revision=self._configuration_revision,
             calibration_revision=self._calibration_revision,
         )
+
+    def _destination_for(self, game_round, cube_id: str) -> tuple[str, str]:
+        """Resolve the game-owned destination policy before motion dispatch."""
+        if game_round.mode is GameMode.BEGINNER and game_round.is_correct(cube_id):
+            return self._settings.teaching.beginner_correct_destination, 'BEGINNER_CORRECT'
+        if game_round.is_correct(cube_id):
+            return 'green_reward', 'configured_destination'
+        return 'red_drop', 'configured_destination'
 
     def _round_transition(
         self,

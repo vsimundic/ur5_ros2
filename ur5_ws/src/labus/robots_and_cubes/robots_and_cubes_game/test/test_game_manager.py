@@ -1,5 +1,7 @@
 """Hardware-free coverage for the serialized application boundary."""
 
+import pytest
+
 from robots_and_cubes_game.contracts import (
     ExecutionErrorCode,
     ExecutionOutcome,
@@ -74,33 +76,52 @@ def test_wrong_then_correct_commits_attempt_only_after_success(settings):
 
 def test_all_attempts_wrong_reaches_failed(settings):
     manager, recorder = _waiting_manager(settings)
-    wrong = [cube.cube_id for cube in manager.machine.round.cubes if cube.kind.value == 'red']
+    wrong = [
+        cube.cube_id for cube in manager.machine.round.cubes
+        if not manager.machine.round.is_correct(cube.cube_id)
+    ]
     for index, cube_id in enumerate(wrong[:manager.machine.attempts_remaining]):
         manager.submit_selection(f'wrong-{index}', manager.machine.round.round_id, cube_id)
         _succeed(manager, recorder)
     assert manager.machine.state is GameState.FAILED
 
 
-def test_easy_red_tap_has_no_operation_or_attempt_cost(settings):
+def test_easy_wrong_colour_dispatches_and_consumes_a_completed_attempt(settings):
     manager, recorder = _waiting_manager(settings, GameMode.EASY)
     result = manager.submit_selection(
         'red-tap', manager.machine.round.round_id, _cube_id(manager, False)
     )
-    assert result.accepted and not result.requires_motion
-    assert not recorder.operations
-    assert manager.machine.attempts_remaining == 2
+    assert result.accepted and result.requires_motion
+    _succeed(manager, recorder)
+    assert manager.machine.attempts_remaining == 1
 
 
-def test_beginner_uses_location_target_not_green_color(settings):
+def test_beginner_uses_the_randomly_selected_shape_target(settings):
     manager, recorder = _waiting_manager(settings, GameMode.BEGINNER, 7)
-    target = manager.machine.round.beginner_target_cube_id
+    target = manager.machine.round.target_cube_id
     assert target is not None
-    assert manager.snapshot().beginner_target_coordinate == (
-        manager.machine.round.cube(target).game_coordinate
-    )
+    assert manager.snapshot().target_visual_kind == manager.machine.round.cube(target).kind
     manager.submit_selection('target', manager.machine.round.round_id, target)
     _succeed(manager, recorder)
     assert manager.machine.state is GameState.SUCCESS
+
+
+def test_challenge_exposes_the_randomly_selected_shape_target(settings):
+    manager, _ = _waiting_manager(settings, GameMode.CHALLENGE, 7)
+    target = manager.machine.round.target_cube_id
+    assert manager.snapshot().target_visual_kind == manager.machine.round.cube(target).kind
+    assert manager.snapshot().target_coordinate == manager.machine.round.cube(
+        target
+    ).game_coordinate
+
+
+def test_beginner_correct_destination_is_explicit_and_not_derived_from_color(settings):
+    manager, recorder = _waiting_manager(settings, GameMode.BEGINNER, 7)
+    target = manager.machine.round.target_cube_id
+    manager.submit_selection('target-destination', manager.machine.round.round_id, target)
+    operation = recorder.operations[-1]
+    assert operation.destination_id == 'green_reward'
+    assert operation.destination_policy == 'BEGINNER_CORRECT'
 
 
 def test_motion_failure_and_cancellation_preserve_attempts(settings):
@@ -123,6 +144,21 @@ def test_motion_failure_and_cancellation_preserve_attempts(settings):
     ))
     assert manager.machine.attempts_remaining == 2
     assert manager.machine.state is GameState.ROBOT_ERROR
+
+
+def test_cancellation_logs_terminal_and_recoverable_events(settings):
+    events = []
+    recorder = Recorder()
+    manager = GameManager(settings, recorder, event_writer=lambda *event: events.append(event))
+    generated = manager.generate_round('generate-cancel', GameMode.STANDARD, 8)
+    manager.confirm_physical_setup('setup-cancel', generated.snapshot.round_id)
+    manager.complete_preflight(True)
+    manager.submit_selection('cancel', generated.snapshot.round_id, _cube_id(manager, True))
+    operation = recorder.operations[-1]
+    manager.handle_execution_result(ExecutionResult(
+        operation.operation_id, ExecutionOutcome.CANCELED, ExecutionErrorCode.CANCELED,
+    ))
+    assert [event[0] for event in events][-2:] == ['cancellation', 'robot_error']
 
 
 def test_duplicate_stale_and_second_selection_are_safe(settings):
@@ -169,6 +205,41 @@ def test_partial_result_requires_reconciliation_before_retry(settings):
     assert manager.retry_operation(
         'safe-retry', manager.machine.round.round_id, operation.operation_id
     ).accepted
+
+
+@pytest.mark.parametrize(
+    'progress,resolution',
+    [
+        (PhysicalProgress.MAY_HAVE_GRASPED, 'held_or_transported'),
+        (PhysicalProgress.MAY_HAVE_TRANSPORTED, 'held_or_transported'),
+        (PhysicalProgress.MAY_HAVE_RELEASED, 'at_destination'),
+    ],
+)
+def test_ambiguous_progress_can_be_resolved_without_permitting_blind_retry(
+    settings, progress, resolution
+):
+    manager, recorder = _waiting_manager(settings)
+    manager.submit_selection('ambiguous', manager.machine.round.round_id, _cube_id(manager, False))
+    operation = recorder.operations[-1]
+    manager.handle_execution_result(ExecutionResult(
+        operation.operation_id, ExecutionOutcome.FAILED,
+        ExecutionErrorCode.EXECUTION_FAILED, 'mock ambiguity', progress,
+    ))
+    result = manager.reconcile_non_retryable(
+        'reconcile', manager.machine.round.round_id, operation.operation_id, resolution
+    )
+    assert result.accepted
+    assert manager.machine.state is GameState.IDLE
+
+
+def test_motion_feedback_advances_reconstructable_snapshot(settings):
+    manager, recorder = _waiting_manager(settings)
+    manager.submit_selection('feedback', manager.machine.round.round_id, _cube_id(manager, True))
+    operation = recorder.operations[-1]
+    before = manager.snapshot().state_version
+    assert manager.handle_execution_feedback(operation.operation_id, 'GRASPING')
+    assert manager.snapshot().motion_stage == 'GRASPING'
+    assert manager.snapshot().state_version == before + 1
 
 
 def test_abort_returns_idle_and_preserves_no_hidden_operation(settings):

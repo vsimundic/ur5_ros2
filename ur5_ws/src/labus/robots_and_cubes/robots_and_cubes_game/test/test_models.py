@@ -16,7 +16,7 @@ from robots_and_cubes_game.models import (
 
 def test_mode_definitions_are_complete_and_stable():
     assert {mode.value for mode in GameMode} == {
-        'easy', 'beginner', 'standard', 'challenge'
+        'easy', 'beginner', 'standard', 'challenge', 'spatial'
     }
 
 

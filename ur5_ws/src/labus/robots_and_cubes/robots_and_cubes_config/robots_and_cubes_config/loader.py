@@ -25,7 +25,9 @@ from .models import (
     RobotCommissioning,
     RobotIdentity,
     Size3D,
+    SpatialSettings,
     StandardSettings,
+    SUPPORTED_EXECUTION_MODES,
     SUPPORTED_MODES,
     SUPPORTED_ROTATIONS,
     TaskTcp,
@@ -107,8 +109,13 @@ def load_user_settings(path: str | Path) -> UserSettings:
         raise ConfigError('schema_version must be 1')
 
     application = _mapping(root['application'], 'application')
-    _exact(application, ('name',), 'application')
+    _exact(application, ('name', 'execution_mode'), 'application')
     application_name = _string(application['name'], 'application.name')
+    execution_mode = _string(application['execution_mode'], 'application.execution_mode')
+    if execution_mode not in SUPPORTED_EXECUTION_MODES:
+        raise ConfigError(
+            f'application.execution_mode supports only {SUPPORTED_EXECUTION_MODES}'
+        )
 
     board_data = _mapping(root['board'], 'board')
     _exact(board_data, ('rows', 'columns', 'cell_size_m'), 'board')
@@ -130,7 +137,11 @@ def load_user_settings(path: str | Path) -> UserSettings:
         raise ConfigError('cube x/y size cannot exceed board.cell_size_m')
 
     game_data = _mapping(root['game'], 'game')
-    _exact(game_data, ('enabled_modes', 'attempts', 'cubes', 'standard', 'challenge'), 'game')
+    _exact(
+        game_data,
+        ('enabled_modes', 'attempts', 'cubes', 'standard', 'spatial', 'challenge'),
+        'game',
+    )
     modes_value = game_data['enabled_modes']
     if not isinstance(modes_value, list) or not modes_value:
         raise ConfigError('game.enabled_modes must be a non-empty list')
@@ -141,19 +152,29 @@ def load_user_settings(path: str | Path) -> UserSettings:
         raise ConfigError('game.enabled_modes cannot contain duplicates')
 
     counts_data = _mapping(game_data['cubes'], 'game.cubes')
-    _exact(counts_data, ('red_count', 'green_count'), 'game.cubes')
+    _exact(
+        counts_data,
+        ('red_count', 'green_count', 'blue_count', 'black_count', 'white_count'),
+        'game.cubes',
+    )
     counts = CubeCounts(
         red_count=_integer(counts_data['red_count'], 'game.cubes.red_count', 1),
         green_count=_integer(counts_data['green_count'], 'game.cubes.green_count', 1),
+        blue_count=_integer(counts_data['blue_count'], 'game.cubes.blue_count', 1),
+        black_count=_integer(counts_data['black_count'], 'game.cubes.black_count', 1),
+        white_count=_integer(counts_data['white_count'], 'game.cubes.white_count', 1),
     )
-    if counts.green_count != 1:
-        raise ConfigError('game.cubes.green_count must equal 1')
+    if any(count != 1 for count in (
+        counts.red_count, counts.green_count, counts.blue_count,
+        counts.black_count, counts.white_count,
+    )):
+        raise ConfigError('game.cubes requires exactly one piece of each colour')
     if counts.total > MAX_TOUCHSCREEN_ANSWERS:
         raise ConfigError(
             f'total cube count cannot exceed {MAX_TOUCHSCREEN_ANSWERS}'
         )
     if counts.total + 1 > board.cell_count:
-        raise ConfigError('board needs one origin cell plus all cube cells')
+        raise ConfigError('board needs room for all pieces and the Standard origin')
 
     standard_data = _mapping(game_data['standard'], 'game.standard')
     _exact(standard_data, ('central_origin_margin_cells',), 'game.standard')
@@ -164,6 +185,17 @@ def load_user_settings(path: str | Path) -> UserSettings:
     )
     if 2 * margin >= board.rows or 2 * margin >= board.columns:
         raise ConfigError('central origin margin leaves no Standard origin cells')
+
+    spatial_data = _mapping(game_data['spatial'], 'game.spatial')
+    _exact(spatial_data, ('origin_column', 'origin_row'), 'game.spatial')
+    origin_column = _integer(
+        spatial_data['origin_column'], 'game.spatial.origin_column', 0,
+    )
+    origin_row = _integer(
+        spatial_data['origin_row'], 'game.spatial.origin_row', 0,
+    )
+    if origin_column >= board.columns or origin_row >= board.rows:
+        raise ConfigError('Spatial origin must be inside the board')
 
     challenge_data = _mapping(game_data['challenge'], 'game.challenge')
     _exact(challenge_data, ('rotations_deg', 'enable_left_handed'), 'game.challenge')
@@ -186,6 +218,7 @@ def load_user_settings(path: str | Path) -> UserSettings:
         attempts=_integer(game_data['attempts'], 'game.attempts', 1),
         cubes=counts,
         standard=StandardSettings(margin),
+        spatial=SpatialSettings(origin_column, origin_row),
         challenge=ChallengeSettings(
             rotations,
             _boolean(
@@ -267,7 +300,15 @@ def load_user_settings(path: str | Path) -> UserSettings:
         raise ConfigError('teaching.beginner_correct_destination is unsupported')
     teaching = TeachingSettings(beginner_destination)
     return UserSettings(
-        schema_version, application_name, game, board, cube, generation, mock, calibration,
+        schema_version,
+        application_name,
+        execution_mode,
+        game,
+        board,
+        cube,
+        generation,
+        mock,
+        calibration,
         teaching,
     )
 

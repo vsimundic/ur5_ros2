@@ -81,7 +81,8 @@ class GameSnapshot:
     origin_cell: Optional[GridCell]
     rotation_deg: Optional[int]
     handedness: Optional[str]
-    beginner_target_coordinate: Optional[GameCoordinate]
+    target_visual_kind: Optional[CubeKind]
+    target_coordinate: Optional[GameCoordinate]
     cubes: Tuple[SnapshotCube, ...]
     answer_order: Tuple[str, ...]
     selected_answer_ids: Tuple[str, ...]
@@ -90,6 +91,7 @@ class GameSnapshot:
     operation_state: str
     pending_request_id: Optional[str]
     pending_operation_id: Optional[str]
+    motion_stage: Optional[str]
     game_flow_ready: bool
     error_code: ExecutionErrorCode
     error_summary: str

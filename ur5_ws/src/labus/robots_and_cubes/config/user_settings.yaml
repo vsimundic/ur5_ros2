@@ -2,15 +2,23 @@ schema_version: 1
 
 application:
   name: "Robots and Cubes"
+  execution_mode: MOCK
 
 game:
-  enabled_modes: [easy, beginner, standard, challenge]
+  enabled_modes: [easy, beginner, spatial, standard, challenge]
   attempts: 2
   cubes:
-    red_count: 4
+    red_count: 1
     green_count: 1
+    blue_count: 1
+    black_count: 1
+    white_count: 1
   standard:
     central_origin_margin_cells: 1
+  spatial:
+    # Fixed printed origin frame used only by the relative-direction activity.
+    origin_column: 2
+    origin_row: 2
   challenge:
     rotations_deg: [0, 90, 180, 270]
     enable_left_handed: true

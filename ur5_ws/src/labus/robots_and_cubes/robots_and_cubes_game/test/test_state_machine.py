@@ -100,19 +100,19 @@ def test_partial_motion_failure_requires_reconciliation_before_retry(settings):
     assert machine.state is GameState.EXECUTING_SELECTION
 
 
-def test_easy_wrong_selection_has_no_motion_or_attempt_cost(settings):
+def test_easy_wrong_selection_requires_motion_and_consumes_a_life(settings):
     machine = _waiting_machine(settings, GameMode.EASY)
     wrong = _cube_id(machine, False)
-    assert machine.submit_selection(wrong) is SelectionDisposition.EASY_HINT
-    assert machine.state is GameState.WAITING_FOR_CHILD
-    assert machine.attempts_remaining == 2
-    assert machine.pending_cube_id is None
-    assert wrong not in machine.selected_answers
+    assert machine.submit_selection(wrong) is SelectionDisposition.EXECUTION_REQUIRED
+    assert machine.state is GameState.EXECUTING_SELECTION
+    machine.complete_motion(True)
+    assert machine.attempts_remaining == 1
+    assert wrong in machine.selected_answers
 
 
 def test_beginner_correctness_uses_target_identity_not_color(settings):
     machine = _waiting_machine(settings, GameMode.BEGINNER, seed=7)
-    target = machine.round.beginner_target_cube_id
+    target = machine.round.target_cube_id
     assert target is not None
     assert machine.round.is_correct(target)
     machine.submit_selection(target)

@@ -1,0 +1,12 @@
+uint8 SUCCESS=0
+uint8 FAILURE=1
+uint8 CANCELED=2
+
+string request_id
+uint8 outcome
+string failure_stage
+bool use_explicit_physical_progress
+uint8 physical_progress
+---
+bool accepted
+string summary

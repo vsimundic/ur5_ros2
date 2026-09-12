@@ -32,6 +32,8 @@ class RosGameManagerNode(Node):
         settings: UserSettings,
         configuration_revision: str = 'unversioned',
         calibration_revision: str = '',
+        preflight=None,
+        event_writer=None,
     ) -> None:
         """Create application services and a transient latest-snapshot publisher."""
         super().__init__('robots_and_cubes_game_manager')
@@ -40,6 +42,8 @@ class RosGameManagerNode(Node):
             self._dispatch_operation,
             configuration_revision,
             calibration_revision,
+            event_writer=event_writer,
+            preflight=preflight,
         )
         qos = QoSProfile(
             depth=1,
@@ -58,7 +62,10 @@ class RosGameManagerNode(Node):
         self._manager.add_snapshot_listener(self._publish_snapshot)
 
     def _generate_round(self, request, response):
-        modes = (GameMode.EASY, GameMode.BEGINNER, GameMode.STANDARD, GameMode.CHALLENGE)
+        modes = (
+            GameMode.EASY, GameMode.BEGINNER, GameMode.STANDARD,
+            GameMode.CHALLENGE, GameMode.SPATIAL,
+        )
         if request.mode >= len(modes):
             response.accepted = False
             response.error = self._error_message(
@@ -95,6 +102,22 @@ class RosGameManagerNode(Node):
 
     def _reconcile(self, request, response):
         if request.resolution != ReconcileOperation.Request.RETRY_SAFE:
+            if request.resolution in (
+                ReconcileOperation.Request.CUBE_HELD_OR_TRANSPORTED,
+                ReconcileOperation.Request.CUBE_AT_DESTINATION,
+            ):
+                return self._fill_response(
+                    response,
+                    self._manager.reconcile_non_retryable(
+                        request.request_id,
+                        request.round_id,
+                        request.operation_id,
+                        'held_or_transported'
+                        if request.resolution
+                        == ReconcileOperation.Request.CUBE_HELD_OR_TRANSPORTED
+                        else 'at_destination',
+                    ),
+                )
             return self._fill_response(
                 response,
                 self._manager.abort_round(request.request_id, request.round_id),
@@ -118,9 +141,8 @@ class RosGameManagerNode(Node):
 
     def _fill_response(self, response, result):
         response.accepted = result.accepted
-        response.requires_motion = (
-            result.requires_motion if hasattr(response, 'requires_motion') else False
-        )
+        if hasattr(response, 'requires_motion'):
+            response.requires_motion = result.requires_motion
         response.error = self._error_message(
             result.error_code, result.error_summary, result.snapshot
         )
@@ -131,6 +153,7 @@ class RosGameManagerNode(Node):
         """Send only an application action goal; no driver or MoveIt API is used here."""
         goal = ExecutePickPlace.Goal()
         goal.request_id = operation.request_id
+        goal.operation_id = operation.operation_id
         goal.round_id = operation.round_id
         goal.cube_id = operation.cube_id
         goal.grid_column = operation.cell.column
@@ -139,7 +162,12 @@ class RosGameManagerNode(Node):
         goal.destination_policy = operation.destination_policy
         goal.configuration_revision = operation.configuration_revision
         goal.calibration_revision = operation.calibration_revision
-        future = self._motion_client.send_goal_async(goal)
+        future = self._motion_client.send_goal_async(
+            goal,
+            feedback_callback=lambda feedback: self._on_feedback(
+                feedback, operation.operation_id
+            ),
+        )
         future.add_done_callback(
             lambda future: self._on_goal_response(future, operation.operation_id)
         )
@@ -178,6 +206,16 @@ class RosGameManagerNode(Node):
                 str(error), PhysicalProgress.NOT_STARTED,
             ))
 
+    def _on_feedback(self, feedback_message, operation_id: str) -> None:
+        """Expose stable application stages without controller/planner detail."""
+        names = (
+            'PLANNING', 'MOVING_TO_PREGRASP', 'DESCENDING', 'GRASPING',
+            'LIFTING', 'MOVING_TO_DESTINATION', 'RELEASING', 'RETREATING',
+        )
+        stage = feedback_message.feedback.stage
+        if 0 <= stage < len(names):
+            self._manager.handle_execution_feedback(operation_id, names[stage])
+
     def _publish_snapshot(self, snapshot: GameSnapshot) -> None:
         self._snapshot_publisher.publish(self._to_message(snapshot))
 
@@ -189,8 +227,10 @@ class RosGameManagerNode(Node):
         message.mode = {
             'easy': GameStateSnapshot.EASY, 'beginner': GameStateSnapshot.BEGINNER,
             'standard': GameStateSnapshot.STANDARD, 'challenge': GameStateSnapshot.CHALLENGE,
+            'spatial': GameStateSnapshot.SPATIAL,
         }.get(snapshot.mode, GameStateSnapshot.EASY)
         message.game_state = snapshot.game_state
+        message.has_origin = snapshot.origin_cell is not None
         if snapshot.origin_cell is not None:
             message.origin_column = snapshot.origin_cell.column
             message.origin_row = snapshot.origin_cell.row
@@ -198,10 +238,13 @@ class RosGameManagerNode(Node):
         message.handedness = (
             GameStateSnapshot.LEFT if snapshot.handedness == 'left' else GameStateSnapshot.RIGHT
         )
-        message.has_beginner_target = snapshot.beginner_target_coordinate is not None
-        if snapshot.beginner_target_coordinate is not None:
-            message.beginner_target_game_x = snapshot.beginner_target_coordinate.x
-            message.beginner_target_game_y = snapshot.beginner_target_coordinate.y
+        message.has_target_visual_kind = snapshot.target_visual_kind is not None
+        if snapshot.target_visual_kind is not None:
+            message.target_visual_kind = self._cube_message_kind(snapshot.target_visual_kind)
+        message.has_target_coordinate = snapshot.target_coordinate is not None
+        if snapshot.target_coordinate is not None:
+            message.target_game_x = snapshot.target_coordinate.x
+            message.target_game_y = snapshot.target_coordinate.y
         message.cubes = [self._cube_message(cube) for cube in snapshot.cubes]
         message.answer_order = list(snapshot.answer_order)
         message.selected_answer_ids = list(snapshot.selected_answer_ids)
@@ -214,6 +257,14 @@ class RosGameManagerNode(Node):
         }[snapshot.operation_state]
         message.pending_request_id = snapshot.pending_request_id or ''
         message.pending_operation_id = snapshot.pending_operation_id or ''
+        stages = (
+            'PLANNING', 'MOVING_TO_PREGRASP', 'DESCENDING', 'GRASPING',
+            'LIFTING', 'MOVING_TO_DESTINATION', 'RELEASING', 'RETREATING',
+        )
+        message.motion_stage = (
+            stages.index(snapshot.motion_stage)
+            if snapshot.motion_stage in stages else 0
+        )
         message.game_flow_ready = snapshot.game_flow_ready
         message.recoverable_error = self._error_message(
             snapshot.error_code, snapshot.error_summary, snapshot
@@ -221,10 +272,20 @@ class RosGameManagerNode(Node):
         return message
 
     @staticmethod
-    def _cube_message(cube) -> CubeState:
+    def _cube_message_kind(kind) -> int:
+        return {
+            'red': CubeState.RED,
+            'green': CubeState.GREEN,
+            'blue': CubeState.BLUE,
+            'black': CubeState.BLACK,
+            'white': CubeState.WHITE,
+        }[kind.value]
+
+    @classmethod
+    def _cube_message(cls, cube) -> CubeState:
         message = CubeState()
         message.cube_id = cube.cube_id
-        message.visual_kind = CubeState.GREEN if cube.kind.value == 'green' else CubeState.RED
+        message.visual_kind = cls._cube_message_kind(cube.kind)
         message.column = cube.cell.column
         message.row = cube.cell.row
         message.game_x = cube.game_coordinate.x

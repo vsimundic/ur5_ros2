@@ -1,6 +1,10 @@
 # Robots and Cubes — Phase 1 Implementation Plan
 
-Status: **Phase 2 implemented for the user-approved configuration and pure game-core scope.** This maps `docs/treasure_hunt_spec.md` onto the source and offline findings in [implementation_inventory.md](implementation_inventory.md). Existing UR, MoveIt, gripper, description and Docker infrastructure stays authoritative.
+Status: **Phases 1–5 approved; Phase 6 implementation, automated checks, and
+manual browser/mock validation accepted.** This maps `docs/treasure_hunt_spec.md`
+onto the source and offline findings in [implementation_inventory.md](implementation_inventory.md).
+Existing UR, MoveIt, gripper, description and Docker infrastructure stays
+authoritative. Physical-motion work remains out of scope.
 
 The application’s canonical product name is **Robots and Cubes**. New ROS packages and code namespaces use the `robots_and_cubes_*` prefix. All application source, frontend, editable configuration, and runtime-data directories live under `ur5_ws/src/labus/robots_and_cubes/`. The specification keeps its existing filename as the original requirements artifact.
 
@@ -190,8 +194,8 @@ Application scene ownership covers board, origin, cubes, destinations and fixed 
 | 2 — complete | `user_settings.yaml`, `robot_commissioning.yaml`, strict typed loading, board/cube models, exact coordinate math, mode definitions, seeded round generator and hardware-independent state machine |
 | 3 — complete | `robots_and_cubes_interfaces`, serialized ROS game-manager boundary, transient complete snapshots, request idempotency, structured execution/reconciliation contracts, runtime schemas and JSONL event records; no executor or hardware client |
 | 4 — complete | Command-free grid calibration and teaching: transactional P0/PX/PY/PXY lifecycle, atomic runtime data, revision invalidation, fresh-state adapters, fixed `grid_frame` ownership, and hardware-free tests |
-| 5 | Mock action executor; full game loop, stage failures, cancellation, idempotent recovery |
-| 6 | Croatian Kid UI + Operator UI/gateway; dynamic answers, localization, lockout, reconnect, setup/calibration/teaching screens |
+| 5 — complete | Hardware-free `ExecutePickPlace` mock server with ordered feedback, deterministic failure injection, cancellation, physical-progress/reconciliation semantics, one-active-operation protection, synthetic mock-only readiness and preflight, complete backend game flows, and mock-only bringup. ROS game-manager/action integration was manually validated in the normal Docker container. |
+| 6 — complete and manually accepted | FastAPI allowlisted gateway with a thread-confined rclpy bridge, complete versioned WebSocket snapshots, Croatian React Kid UI, React Operator UI, command-free calibration/teaching controls, and mock-backend browser integration |
 | 7 | Opt-in Pilz motion and trajectory policy; offline/plan-only checks before supervised execution |
 | 8 | Full scene and gripper integration; attach/detach, contact/stop/cancel, partial-operation recovery |
 | 9 | Existing RRT* ID used for validated free-space fallback only |
@@ -235,11 +239,10 @@ schemas for future calibration, taught poses, and event records. The empty
 [ros_application_contracts.md](ros_application_contracts.md) for the exact
 action, messages, services, snapshot, idempotency, and recovery semantics.
 
-Focused contract/unit coverage is hardware-free. ROS graph integration testing
-is deferred because the audit environment previously denied loopback/DDS socket
-creation; no test is weakened to work around that restriction. It must use an
-isolated domain and fake action endpoint in a suitable environment before a
-future gateway or executor phase.
+Focused contract/unit coverage is hardware-free. The earlier Codex sandbox
+denied loopback/DDS socket creation, but that is not a project limitation:
+Phase 5 subsequently validated the real ROS game-manager/action-server boundary
+in the normal Docker container. No physical robot graph was started.
 
 ## 12. Phase 4 delivery boundary
 
@@ -260,3 +263,63 @@ Beginner policy maps `BEGINNER_CORRECT` to the configured `green_reward` or
 `beginner_demo` logical destination. Cube TCP translation is `[0, 0, 0.275]` m
 and pen-tip translation is `[0, 0, 0.315]` m from `tool0`; cube TCP orientation
 remains provisional and uncommissioned.
+
+## 13. Phase 5 delivery boundary
+
+Phase 5 adds `robots_and_cubes_mock_execution` and
+`robots_and_cubes_bringup/mock_game.launch.py`. The mock is an
+application-only server for the existing `ExecutePickPlace` action: it has no
+UR, MoveIt, controller, Modbus, gripper, Gazebo, camera, or hardware-network
+dependency. It is distinct from UR `use_mock_hardware`, Gazebo, fake
+ros2_control, and MoveIt plan-only operation.
+
+`MOCK` is the only implemented execution mode. The mock launch rejects
+`PLAN_ONLY` and `REAL` rather than falling through to synthetic execution. It
+supplies unmistakably `SYNTHETIC_MOCK_*_ONLY` calibration, home, safe,
+destination, and all-cell availability fixtures. Those fixtures provide only
+mock preflight consistency and can never satisfy real-hardware readiness.
+
+The server accepts one `ExecutePickPlace` operation at a time, emits every
+stable application stage, checks cancellation between short bounded stage waits,
+and maps configured failures/cancellation to existing action outcome, error,
+and physical-progress semantics. `configure_mock_outcome` is a deterministic,
+one-shot development service. The game manager remains correctness/attempt
+authority; it now exposes application motion stage in its versioned snapshot,
+uses an explicit `BEGINNER_CORRECT` destination policy, and logs each mock
+transition through the normal event writer. Ambiguous physical progress
+requires reconciliation: source confirmation may permit retry; held,
+transported, or placed confirmation closes the round because Phase 5 has no
+physical recovery motion.
+
+Manual ROS integration validation was run in the normal project Docker
+container after starting the documented mock backend:
+
+```bash
+ros2 run robots_and_cubes_mock_execution mock_backend_smoke_test
+```
+
+It completed with `mock backend success: state version 7`, validating the live
+game-manager to mock-`ExecutePickPlace` boundary. This does not represent a
+physical-robot, cancellation, failure-injection, or reconciliation validation.
+
+## 14. Phase 6 delivery boundary
+
+Phase 6 adds `robots_and_cubes_ui_gateway` and the separate React/TypeScript
+web project. FastAPI serves an allowlisted application API and a complete,
+versioned snapshot WebSocket. Its rclpy clients, subscription, executor, and
+shutdown are confined to one bridge thread; it cannot expose arbitrary ROS
+graph, controller, MoveIt, gripper, parameter, or driver operations.
+
+Kid Mode receives centrally validated UTF-8 Croatian copy from
+`config/child_text_hr.yaml`, uses backend coordinates/round state, ignores
+stale snapshots, and holds/reuses a selection request identity across an
+uncertain retry. Operator-only HTTP capabilities are protected server-side by a
+runtime bearer token; a URL or WebSocket connection does not grant them. The
+Operator UI identifies synthetic mock mode and individual readiness facts while
+listing uncommissioned motion gates, rather than declaring the robot ready.
+
+The gateway can serve built SPA routes `/kid` and `/operator` plus assets
+without shadowing `/api`. Automated gateway/frontend checks and normal-container
+browser-to-live-mock validation were accepted on 2026-09-12; see
+`docs/ui_testing.md`. This phase contains no physical robot, MoveIt planning,
+trajectory, gripper, or commissioning implementation.

@@ -4,8 +4,9 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 
 
-SUPPORTED_MODES = ('easy', 'beginner', 'standard', 'challenge')
+SUPPORTED_MODES = ('easy', 'beginner', 'standard', 'challenge', 'spatial')
 SUPPORTED_ROTATIONS = (0, 90, 180, 270)
+SUPPORTED_EXECUTION_MODES = ('MOCK', 'PLAN_ONLY', 'REAL')
 MAX_TOUCHSCREEN_ANSWERS = 12
 
 
@@ -15,22 +16,36 @@ class ConfigError(ValueError):
 
 @dataclass(frozen=True)
 class CubeCounts:
-    """Configured red and green cube quantities."""
+    """One physical piece for each fixed exhibition colour."""
 
     red_count: int
     green_count: int
+    blue_count: int
+    black_count: int
+    white_count: int
 
     @property
     def total(self) -> int:
         """Return the total cube count."""
-        return self.red_count + self.green_count
+        return (
+            self.red_count + self.green_count + self.blue_count
+            + self.black_count + self.white_count
+        )
 
 
 @dataclass(frozen=True)
 class StandardSettings:
-    """Standard-mode origin restrictions."""
+    """Standard-mode legal origin margin."""
 
     central_origin_margin_cells: int
+
+
+@dataclass(frozen=True)
+class SpatialSettings:
+    """Fixed printed origin used by the relative-direction activity."""
+
+    origin_column: int
+    origin_row: int
 
 
 @dataclass(frozen=True)
@@ -49,6 +64,7 @@ class GameSettings:
     attempts: int
     cubes: CubeCounts
     standard: StandardSettings
+    spatial: SpatialSettings
     challenge: ChallengeSettings
 
 
@@ -128,6 +144,7 @@ class UserSettings:
 
     schema_version: int
     application_name: str
+    execution_mode: str
     game: GameSettings
     board: BoardSettings
     cube: CubeSettings

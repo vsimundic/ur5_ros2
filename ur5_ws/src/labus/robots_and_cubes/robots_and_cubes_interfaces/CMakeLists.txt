@@ -19,6 +19,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "srv/CaptureCalibrationPoint.srv"
   "srv/CaptureTaughtPosition.srv"
   "srv/ConfirmPhysicalSetup.srv"
+  "srv/ConfigureMockOutcome.srv"
   "srv/DeleteTaughtPosition.srv"
   "srv/GenerateRound.srv"
   "srv/GetCalibrationStatus.srv"

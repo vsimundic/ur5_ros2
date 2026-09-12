@@ -31,14 +31,19 @@ def _write(tmp_path, data):
 def test_default_user_settings_load():
     settings = load_user_settings(USER_CONFIG)
     assert settings.application_name == 'Robots and Cubes'
+    assert settings.execution_mode == 'MOCK'
     assert settings.board.rows == 6
     assert settings.board.columns == 6
     assert settings.board.cell_size_m == 0.09
-    assert settings.game.cubes.red_count == 4
+    assert settings.game.cubes.red_count == 1
     assert settings.game.cubes.green_count == 1
+    assert settings.game.cubes.blue_count == 1
+    assert settings.game.cubes.black_count == 1
+    assert settings.game.cubes.white_count == 1
     assert settings.game.cubes.total == 5
     assert settings.game.attempts == 2
     assert settings.game.standard.central_origin_margin_cells == 1
+    assert (settings.game.spatial.origin_column, settings.game.spatial.origin_row) == (2, 2)
     assert settings.game.challenge.rotations_deg == (0, 90, 180, 270)
 
 
@@ -91,7 +96,7 @@ def test_impossible_cube_and_origin_capacity_is_rejected(tmp_path):
     data = _user_data()
     data['board']['rows'] = 2
     data['board']['columns'] = 2
-    with pytest.raises(ConfigError, match='origin cell'):
+    with pytest.raises(ConfigError, match='room for all pieces'):
         load_user_settings(_write(tmp_path, data))
 
 
@@ -99,6 +104,13 @@ def test_impossible_standard_margin_is_rejected(tmp_path):
     data = _user_data()
     data['game']['standard']['central_origin_margin_cells'] = 3
     with pytest.raises(ConfigError, match='leaves no Standard origin'):
+        load_user_settings(_write(tmp_path, data))
+
+
+def test_spatial_origin_outside_board_is_rejected(tmp_path):
+    data = _user_data()
+    data['game']['spatial']['origin_column'] = 6
+    with pytest.raises(ConfigError, match='Spatial origin must be inside'):
         load_user_settings(_write(tmp_path, data))
 
 
@@ -132,6 +144,13 @@ def test_unknown_nested_property_is_rejected(tmp_path):
         load_user_settings(_write(tmp_path, data))
 
 
+def test_execution_mode_is_explicit_and_closed_to_unknown_values(tmp_path):
+    data = _user_data()
+    data['application']['execution_mode'] = 'UNSAFE'
+    with pytest.raises(ConfigError, match='execution_mode supports only'):
+        load_user_settings(_write(tmp_path, data))
+
+
 def test_non_boolean_is_not_coerced(tmp_path):
     data = _user_data()
     data['generation']['allow_adjacent_cubes'] = 'true'
@@ -148,10 +167,8 @@ def test_disabled_adjacency_requires_two_cell_manhattan_distance(tmp_path):
 
 def test_touchscreen_answer_limit_is_enforced(tmp_path):
     data = _user_data()
-    data['board']['rows'] = 5
-    data['board']['columns'] = 5
-    data['game']['cubes']['red_count'] = 12
-    with pytest.raises(ConfigError, match='cannot exceed 12'):
+    data['game']['cubes']['red_count'] = 2
+    with pytest.raises(ConfigError, match='exactly one piece'):
         load_user_settings(_write(tmp_path, data))
 
 

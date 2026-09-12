@@ -13,6 +13,7 @@ class GameMode(str, Enum):
     BEGINNER = 'beginner'
     STANDARD = 'standard'
     CHALLENGE = 'challenge'
+    SPATIAL = 'spatial'
 
 
 class Handedness(str, Enum):
@@ -32,10 +33,13 @@ class QuarterTurn(IntEnum):
 
 
 class CubeKind(str, Enum):
-    """Physical game cube role."""
+    """Fixed physical colour of one exhibition piece."""
 
     RED = 'red'
     GREEN = 'green'
+    BLUE = 'blue'
+    BLACK = 'black'
+    WHITE = 'white'
 
 
 @dataclass(frozen=True, order=True)
@@ -148,14 +152,13 @@ class GameRound:
     round_id: str
     random_seed: int
     mode: GameMode
-    origin_cell: GridCell
+    origin_cell: Optional[GridCell]
     rotation: QuarterTurn
     handedness: Handedness
     cubes: Tuple[Cube, ...]
-    green_cube_id: str
+    target_cube_id: str
     answer_order: Tuple[str, ...]
     attempts: int
-    beginner_target_cube_id: Optional[str] = None
 
     def __post_init__(self) -> None:
         """Protect the immutable round contract from inconsistent construction."""
@@ -179,20 +182,23 @@ class GameRound:
         coordinates = [cube.game_coordinate for cube in self.cubes]
         if not ids or len(ids) != len(set(ids)):
             raise ValueError('round requires cubes with unique ids')
-        if len(cells) != len(set(cells)) or self.origin_cell in cells:
-            raise ValueError('cube cells must be unique and exclude the origin')
+        if len(cells) != len(set(cells)):
+            raise ValueError('piece cells must be unique')
+        if self.origin_cell is not None and not isinstance(self.origin_cell, GridCell):
+            raise TypeError('origin_cell must be a GridCell or None')
+        if self.mode in (GameMode.SPATIAL, GameMode.STANDARD, GameMode.CHALLENGE):
+            if self.origin_cell is None:
+                raise ValueError('coordinate rounds require an origin cell')
+            if self.origin_cell in cells:
+                raise ValueError('pieces must exclude the origin cell')
+        elif self.origin_cell is not None:
+            raise ValueError('Easy and Beginner rounds do not place an origin frame')
         if len(coordinates) != len(set(coordinates)):
             raise ValueError('cube game coordinates must be unique')
-        green = [cube for cube in self.cubes if cube.kind is CubeKind.GREEN]
-        if len(green) != 1 or green[0].cube_id != self.green_cube_id:
-            raise ValueError('round requires exactly one identified green cube')
+        if not isinstance(self.target_cube_id, str) or self.target_cube_id not in ids:
+            raise ValueError('round requires a valid target piece')
         if len(self.answer_order) != len(ids) or set(self.answer_order) != set(ids):
             raise ValueError('answer_order must contain every cube id exactly once')
-        if self.mode is GameMode.BEGINNER:
-            if self.beginner_target_cube_id not in ids:
-                raise ValueError('Beginner round requires a valid target cube')
-        elif self.beginner_target_cube_id is not None:
-            raise ValueError('only Beginner rounds may define a target cube')
 
     def cube(self, cube_id: str) -> Cube:
         """Look up a cube by its stable identity."""
@@ -203,8 +209,4 @@ class GameRound:
 
     def is_correct(self, cube_id: str) -> bool:
         """Evaluate selection against mode-specific correctness."""
-        if self.mode is GameMode.EASY:
-            return cube_id == self.green_cube_id
-        if self.mode is GameMode.BEGINNER:
-            return cube_id == self.beginner_target_cube_id
-        return cube_id == self.green_cube_id
+        return cube_id == self.target_cube_id

@@ -71,11 +71,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     mesa-utils \
     vulkan-tools \
     python3-colcon-common-extensions \
+    python3-venv \
     python3-numpy \
     python3-pip \
     python3-pymodbus \
     python3-rosdep \
     python3-vcstool \
+    nodejs \
+    npm \
     ros-${ROS_DISTRO}-control-msgs \
     ros-${ROS_DISTRO}-desktop-full \
     ros-${ROS_DISTRO}-diagnostic-updater \
@@ -87,6 +90,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     if [ ! -e /etc/ros/rosdep/sources.list.d/20-default.list ]; then rosdep init; fi && \
     rosdep update && \
     rm -rf /var/lib/apt/lists/*
+
+# Browser gateway dependencies are explicit and pinned.  The React project is
+# built from the bind-mounted workspace, so changing its source never requires
+# copying game code into this hardware-capable image.
+RUN python3 -m pip install --break-system-packages --no-cache-dir \
+    fastapi==0.115.12 \
+    uvicorn==0.34.0 \
+    websockets==15.0.1
 
 # The L515 was removed from librealsense after 2.54.2. Build the last SDK
 # release that still contains it, using the user-space USB backend so the

@@ -1,0 +1,56 @@
+# All child-facing copy is deliberately kept outside the React source.  Missing
+# keys are a gateway startup error; Kid Mode never falls back to English.
+title: "ROBOTSKA POTRAGA ZA BLAGOM"
+common:
+  loading: "Učitavanje igre..."
+  attempts: "Pokušaji"
+  coordinate: "Koordinate (x, y)"
+  choose_piece: "Odaberi točan odgovor."
+  choose_cell: "Dodirni točno polje na ploči."
+  and: "i"
+  from_origin: "od ishodišta"
+colours:
+  red: "crvena"
+  green: "zelena"
+  blue: "plava"
+  black: "crna"
+  white: "bijela"
+shapes:
+  green: "Zvijezda"
+  blue: "Krug"
+  red: "Srce"
+  black: "Trokut"
+  white: "Mjesec"
+directions:
+  up: "gore"
+  down: "dolje"
+  right: "desno"
+  left: "lijevo"
+easy:
+  instruction: "Pronađi kocku zadane boje."
+  target_prefix: "Tražena boja"
+beginner:
+  instruction: "Pronađi zadani oblik."
+  target_prefix: "Traženi oblik"
+standard:
+  instruction: "Na kojim se koordinatama nalazi zelena zvijezda?"
+challenge:
+  instruction: "Pronađi koordinate zadanog oblika u okrenutom sustavu!"
+  target_prefix: "Traženi oblik"
+spatial:
+  instruction: "Koji je oblik na zadanom mjestu?"
+  target_prefix: "Traženo mjesto je"
+motion:
+  waiting: "Robot provjerava tvoj odgovor..."
+success:
+  title: "Bravo!"
+  text: "Blago je pronađeno!"
+wrong:
+  one_left: "Još jedan pokušaj!"
+  try_again: "Pokušaj ponovno!"
+failure:
+  title: "Dobar pokušaj!"
+  lost: "Ovaj put blago nije pronađeno."
+  answer_prefix: "Točan odgovor bio je"
+error:
+  placeholder: "Robot trenutačno treba malu pomoć."

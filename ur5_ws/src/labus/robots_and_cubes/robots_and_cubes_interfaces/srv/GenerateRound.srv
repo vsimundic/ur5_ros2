@@ -2,6 +2,7 @@ uint8 EASY=0
 uint8 BEGINNER=1
 uint8 STANDARD=2
 uint8 CHALLENGE=3
+uint8 SPATIAL=4
 
 string request_id
 uint8 mode

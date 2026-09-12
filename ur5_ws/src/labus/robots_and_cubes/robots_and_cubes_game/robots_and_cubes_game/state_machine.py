@@ -3,7 +3,7 @@
 from enum import Enum, IntEnum
 from typing import Optional
 
-from .models import GameMode, GameRound
+from .models import GameRound
 
 
 class GameState(str, Enum):
@@ -25,9 +25,8 @@ class GameState(str, Enum):
 
 
 class SelectionDisposition(str, Enum):
-    """Whether a child selection needs execution or only a hint."""
+    """A child selection is dispatched only after the UI locks input."""
 
-    EASY_HINT = 'easy_hint'
     EXECUTION_REQUIRED = 'execution_required'
 
 
@@ -122,8 +121,6 @@ class GameStateMachine:
         cube = game_round.cube(cube_id)
         if cube_id in self.selected_answers or cube_id in self.removed_cubes:
             raise ValueError(f'cube is no longer selectable: {cube_id}')
-        if game_round.mode is GameMode.EASY and not game_round.is_correct(cube_id):
-            return SelectionDisposition.EASY_HINT
         self.pending_cube_id = cube.cube_id
         self.pending_operation_id = operation_id
         self.physical_progress = PhysicalProgress.NOT_STARTED

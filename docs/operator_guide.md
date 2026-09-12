@@ -21,3 +21,18 @@ Accepted calibration and teaching data are operator runtime data under
 home, safe, reward, and red-capacity facts. It does not make the robot ready:
 cube TCP orientation commissioning, reachability, grasp setup, motion policy,
 speeds, Pilz, and physical commissioning remain later gates.
+
+## Application mock (Phase 5)
+
+The application mock is for backend/game development only. Its synthetic
+calibration, home, safe, destinations, and enabled cells are clearly marked
+`SYNTHETIC_MOCK_*_ONLY`; they are not written to `runtime_data/` and never make
+the real UR5 ready. It neither starts nor contacts UR, MoveIt, Robotiq, FT,
+camera, dashboard, or controller software. Do not use mock readiness as an
+operator authorization for physical setup or robot motion.
+
+If a synthetic execution reports `MAY_HAVE_GRASPED`,
+`MAY_HAVE_TRANSPORTED`, or `MAY_HAVE_RELEASED`, inspect the mocked condition
+through operator tooling. Confirming that the cube remains at source permits
+the existing safe retry path. Confirming it is held/transported or at the
+destination ends the round: Phase 5 intentionally supplies no recovery motion.

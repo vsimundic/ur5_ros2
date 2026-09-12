@@ -1,0 +1,4 @@
+export type VisualKind = 'red' | 'green' | 'blue' | 'black' | 'white';
+export type Cube = { id: string; visual_kind: VisualKind; symbol: string; column: number; row: number; game_coordinate: { x: number; y: number }; removed: boolean };
+export type Snapshot = { version: number; round_id: string | null; mode: string | null; game_state: string; board: { rows: number; columns: number }; origin: { column: number; row: number; rotation_deg: number; handedness: string } | null; target_visual_kind: VisualKind | null; target_coordinate: { x: number; y: number } | null; cubes: Cube[]; answer_order: string[]; selected_answer_ids: string[]; disabled_answer_ids: string[]; attempts_remaining: number; readiness: { game_flow_ready: boolean }; motion_stage: string | null; operation: { state: string; request_id: string | null; id: string | null }; recoverable_error: { summary: string } | null };
+export type ChildText = Record<string, string | Record<string, string>>;

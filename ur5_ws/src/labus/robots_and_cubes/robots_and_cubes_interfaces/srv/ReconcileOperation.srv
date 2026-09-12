@@ -1,5 +1,7 @@
 uint8 RETRY_SAFE=0
-uint8 ABORT_REQUIRED=1
+uint8 CUBE_HELD_OR_TRANSPORTED=1
+uint8 CUBE_AT_DESTINATION=2
+uint8 ABORT_REQUIRED=3
 
 string request_id
 string round_id

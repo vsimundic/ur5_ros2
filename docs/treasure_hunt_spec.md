@@ -1,6 +1,11 @@
 # UR5 Coordinate Treasure Hunt
 ## Complete implementation specification for Codex
 
+> **Phase 6 mode revision:** The piece set and mode behavior in
+> [phase_6_game_mode_update.md](phase_6_game_mode_update.md) supersede the
+> original red/green mode descriptions below. Existing numeric Standard and
+> Challenge interface values are retained; Spatial is the new fifth mode.
+
 # 0. Purpose of this document
 
 Implement an exhibition-ready educational application for a UR5 robot with a Robotiq 3-finger gripper.
