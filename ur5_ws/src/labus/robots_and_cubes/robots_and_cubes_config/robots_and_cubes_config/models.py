@@ -104,6 +104,25 @@ class MockSettings:
 
 
 @dataclass(frozen=True)
+class CalibrationSettings:
+    """User-configurable offline calibration acceptance limits."""
+
+    maximum_side_length_error_m: float
+    maximum_angle_error_deg: float
+    minimum_vector_length_m: float
+    maximum_capture_age_seconds: float
+    maximum_fourth_point_error_m: float
+    maximum_taught_state_age_seconds: float
+
+
+@dataclass(frozen=True)
+class TeachingSettings:
+    """Logical policy for where a correct Beginner selection is demonstrated."""
+
+    beginner_correct_destination: str
+
+
+@dataclass(frozen=True)
 class UserSettings:
     """Fully validated normal user configuration."""
 
@@ -114,24 +133,42 @@ class UserSettings:
     cube: CubeSettings
     generation: GenerationSettings
     mock: MockSettings
+    calibration: CalibrationSettings
+    teaching: TeachingSettings
 
 
 @dataclass(frozen=True)
 class RobotIdentity:
     """Discovered robot and MoveIt identifiers."""
 
-    base_frame: str
-    planning_frame: str
     planning_group: str
     planning_end_link: str
 
 
 @dataclass(frozen=True)
-class RigidTransform:
-    """Translation and unit-quaternion rigid transform."""
+class FrameSettings:
+    """Explicit application and MoveIt reference frames."""
 
+    task_reference_frame: str
+    moveit_planning_frame: str
+
+
+@dataclass(frozen=True)
+class TaskTcp:
+    """Application cube-pinch TCP relative to its parent frame."""
+
+    frame_name: str
+    parent_frame: str
     translation_m: Tuple[float, float, float]
-    rotation_xyzw: Tuple[float, float, float, float]
+    orientation_rpy_rad: Tuple[float, float, float]
+
+
+@dataclass(frozen=True)
+class CalibrationPen:
+    """Calibration pen-tip position relative to its parent frame."""
+
+    parent_frame: str
+    tip_translation_m: Tuple[float, float, float]
 
 
 @dataclass(frozen=True)
@@ -150,8 +187,6 @@ class MotionCommissioning:
     primary_pipeline: Optional[str]
     fallback_pipeline: Optional[str]
     fallback_planner_id: Optional[str]
-    task_tcp_frame: Optional[str]
-    tool_to_pen_tip: Optional[RigidTransform]
     allowed_joint_ranges_rad: Optional[Tuple[JointLimit, ...]]
     maximum_joint_excursion_rad: Optional[Tuple[Tuple[str, float], ...]]
     default_grasp_yaw_deg: Optional[float]
@@ -173,7 +208,10 @@ class RobotCommissioning:
     """Validated advanced configuration with explicit readiness state."""
 
     schema_version: int
+    frames: FrameSettings
     robot: RobotIdentity
+    task_tcp: TaskTcp
+    calibration_pen: CalibrationPen
     motion: MotionCommissioning
     gripper: GripperCommissioning
 
@@ -182,8 +220,6 @@ class RobotCommissioning:
         """Return whether every required physical value has been supplied."""
         motion_values = (
             self.motion.primary_pipeline,
-            self.motion.task_tcp_frame,
-            self.motion.tool_to_pen_tip,
             self.motion.allowed_joint_ranges_rad,
             self.motion.maximum_joint_excursion_rad,
             self.motion.default_grasp_yaw_deg,

@@ -1,6 +1,6 @@
 """Strict YAML loading for Robots and Cubes configuration."""
 
-from math import isfinite, sqrt
+from math import isfinite
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -8,10 +8,13 @@ import yaml
 
 from .models import (
     BoardSettings,
+    CalibrationPen,
+    CalibrationSettings,
     ChallengeSettings,
     ConfigError,
     CubeCounts,
     CubeSettings,
+    FrameSettings,
     GameSettings,
     GenerationSettings,
     GripperCommissioning,
@@ -19,13 +22,14 @@ from .models import (
     MAX_TOUCHSCREEN_ANSWERS,
     MockSettings,
     MotionCommissioning,
-    RigidTransform,
     RobotCommissioning,
     RobotIdentity,
     Size3D,
     StandardSettings,
     SUPPORTED_MODES,
     SUPPORTED_ROTATIONS,
+    TaskTcp,
+    TeachingSettings,
     UserSettings,
 )
 
@@ -92,7 +96,10 @@ def load_user_settings(path: str | Path) -> UserSettings:
     root = _read_yaml(Path(path))
     _exact(
         root,
-        ('schema_version', 'application', 'game', 'board', 'cube', 'generation', 'mock'),
+        (
+            'schema_version', 'application', 'game', 'board', 'cube',
+            'generation', 'mock', 'calibration', 'teaching',
+        ),
         'root',
     )
     schema_version = _integer(root['schema_version'], 'schema_version', 1)
@@ -240,28 +247,35 @@ def load_user_settings(path: str | Path) -> UserSettings:
         'mock.movement_duration_seconds',
         positive=True,
     ))
+    calibration_data = _mapping(root['calibration'], 'calibration')
+    _exact(calibration_data, (
+        'maximum_side_length_error_m', 'maximum_angle_error_deg',
+        'minimum_vector_length_m', 'maximum_capture_age_seconds',
+        'maximum_fourth_point_error_m', 'maximum_taught_state_age_seconds',
+    ), 'calibration')
+    calibration = CalibrationSettings(**{
+        key: _number(calibration_data[key], f'calibration.{key}', positive=True)
+        for key in calibration_data
+    })
+    teaching_data = _mapping(root['teaching'], 'teaching')
+    _exact(teaching_data, ('beginner_correct_destination',), 'teaching')
+    beginner_destination = _string(
+        teaching_data['beginner_correct_destination'],
+        'teaching.beginner_correct_destination',
+    )
+    if beginner_destination not in ('green_reward', 'beginner_demo'):
+        raise ConfigError('teaching.beginner_correct_destination is unsupported')
+    teaching = TeachingSettings(beginner_destination)
     return UserSettings(
-        schema_version, application_name, game, board, cube, generation, mock
+        schema_version, application_name, game, board, cube, generation, mock, calibration,
+        teaching,
     )
 
 
-def _optional_transform(value: Any, path: str) -> RigidTransform | None:
-    if value is None:
-        return None
-    data = _mapping(value, path)
-    _exact(data, ('translation_m', 'rotation_xyzw'), path)
-    translation = data['translation_m']
-    rotation = data['rotation_xyzw']
-    if not isinstance(translation, list) or len(translation) != 3:
-        raise ConfigError(f'{path}.translation_m must contain 3 values')
-    if not isinstance(rotation, list) or len(rotation) != 4:
-        raise ConfigError(f'{path}.rotation_xyzw must contain 4 values')
-    xyz = tuple(_number(value, f'{path}.translation_m') for value in translation)
-    xyzw = tuple(_number(value, f'{path}.rotation_xyzw') for value in rotation)
-    norm = sqrt(sum(component * component for component in xyzw))
-    if abs(norm - 1.0) > 1e-6:
-        raise ConfigError(f'{path}.rotation_xyzw must be a unit quaternion')
-    return RigidTransform(xyz, xyzw)
+def _vector3(value: Any, path: str) -> tuple[float, float, float]:
+    if not isinstance(value, list) or len(value) != 3:
+        raise ConfigError(f'{path} must contain 3 values')
+    return tuple(_number(component, f'{path}[{index}]') for index, component in enumerate(value))
 
 
 def _optional_joint_ranges(value: Any, path: str) -> tuple[JointLimit, ...] | None:
@@ -299,22 +313,55 @@ def _optional_excursions(value: Any, path: str) -> tuple[tuple[str, float], ...]
 def load_robot_commissioning(path: str | Path) -> RobotCommissioning:
     """Load advanced commissioning data without supplying missing values."""
     root = _read_yaml(Path(path))
-    _exact(root, ('schema_version', 'robot', 'motion', 'gripper'), 'root')
+    _exact(
+        root,
+        ('schema_version', 'frames', 'robot', 'task_tcp', 'calibration_pen', 'motion', 'gripper'),
+        'root',
+    )
     schema_version = _integer(root['schema_version'], 'schema_version', 1)
     if schema_version != 1:
         raise ConfigError('schema_version must be 1')
 
+    frames_data = _mapping(root['frames'], 'frames')
+    frame_keys = ('task_reference_frame', 'moveit_planning_frame')
+    _exact(frames_data, frame_keys, 'frames')
+    frames = FrameSettings(**{
+        key: _string(frames_data[key], f'frames.{key}') for key in frame_keys
+    })
+
     robot_data = _mapping(root['robot'], 'robot')
-    robot_keys = ('base_frame', 'planning_frame', 'planning_group', 'planning_end_link')
+    robot_keys = ('planning_group', 'planning_end_link')
     _exact(robot_data, robot_keys, 'robot')
     robot = RobotIdentity(**{
         key: _string(robot_data[key], f'robot.{key}') for key in robot_keys
     })
 
+    task_tcp_data = _mapping(root['task_tcp'], 'task_tcp')
+    task_tcp_keys = ('frame_name', 'parent_frame', 'translation_m', 'orientation_rpy_rad')
+    _exact(task_tcp_data, task_tcp_keys, 'task_tcp')
+    task_tcp = TaskTcp(
+        frame_name=_string(task_tcp_data['frame_name'], 'task_tcp.frame_name'),
+        parent_frame=_string(task_tcp_data['parent_frame'], 'task_tcp.parent_frame'),
+        translation_m=_vector3(task_tcp_data['translation_m'], 'task_tcp.translation_m'),
+        orientation_rpy_rad=_vector3(
+            task_tcp_data['orientation_rpy_rad'], 'task_tcp.orientation_rpy_rad'
+        ),
+    )
+
+    pen_data = _mapping(root['calibration_pen'], 'calibration_pen')
+    pen_keys = ('parent_frame', 'tip_translation_m')
+    _exact(pen_data, pen_keys, 'calibration_pen')
+    calibration_pen = CalibrationPen(
+        parent_frame=_string(pen_data['parent_frame'], 'calibration_pen.parent_frame'),
+        tip_translation_m=_vector3(
+            pen_data['tip_translation_m'], 'calibration_pen.tip_translation_m'
+        ),
+    )
+
     motion_data = _mapping(root['motion'], 'motion')
     motion_keys = (
         'primary_pipeline', 'fallback_pipeline', 'fallback_planner_id',
-        'task_tcp_frame', 'tool_to_pen_tip', 'allowed_joint_ranges_rad',
+        'allowed_joint_ranges_rad',
         'maximum_joint_excursion_rad', 'default_grasp_yaw_deg',
     )
     _exact(motion_data, motion_keys, 'motion')
@@ -328,12 +375,6 @@ def load_robot_commissioning(path: str | Path) -> RobotCommissioning:
         ),
         fallback_planner_id=_optional_string(
             motion_data['fallback_planner_id'], 'motion.fallback_planner_id'
-        ),
-        task_tcp_frame=_optional_string(
-            motion_data['task_tcp_frame'], 'motion.task_tcp_frame'
-        ),
-        tool_to_pen_tip=_optional_transform(
-            motion_data['tool_to_pen_tip'], 'motion.tool_to_pen_tip'
         ),
         allowed_joint_ranges_rad=_optional_joint_ranges(
             motion_data['allowed_joint_ranges_rad'],
@@ -365,4 +406,6 @@ def load_robot_commissioning(path: str | Path) -> RobotCommissioning:
         status_topic=_string(gripper_data['status_topic'], 'gripper.status_topic'),
         **optional_numbers,
     )
-    return RobotCommissioning(schema_version, robot, motion, gripper)
+    return RobotCommissioning(
+        schema_version, frames, robot, task_tcp, calibration_pen, motion, gripper
+    )

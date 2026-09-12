@@ -1,0 +1,6 @@
+string request_id
+string point_name
+---
+bool accepted
+robots_and_cubes_interfaces/ErrorSummary error
+robots_and_cubes_interfaces/CalibrationStatus status

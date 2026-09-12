@@ -107,7 +107,7 @@ Package `config/` files provide versioned defaults/templates. The operator-facin
 | File | Owner and contents |
 |---|---|
 | `user_settings.yaml` | Normal game/board/cube settings, attempts/counts, generation rules, UI/mock timing, common clearances and validated default yaw |
-| `robot_commissioning.yaml` | Mark `ADVANCED — change only during robot commissioning.` Discovered frame/group/planner/interface bindings, pen/tool transform, game joint ranges, excursion limits, approved speeds/tolerances and grasp policy |
+| `robot_commissioning.yaml` | Mark `ADVANCED — change only during robot commissioning.` Authoritative task/MoveIt frames, cube TCP and pen-tip geometry, discovered group/planner/interface bindings, game joint ranges, excursion limits, approved speeds/tolerances and grasp policy |
 | `cell_commissioning.yaml` | Advanced per-cell availability and optional yaw override, with provenance tied to geometry/calibration revision |
 | `child_text_hr.yaml` | Central UTF-8 Croatian child copy; operator copy remains separate |
 | `runtime_data/calibration.yaml` | Version, timestamp, P0/PX/PY, transform, quality, optional PXY and geometry/config identity |
@@ -148,15 +148,16 @@ Future ROS integration tests use a separate domain, localhost discovery and fake
 
 ## 7. Calibration and wrapping existing motion
 
-Calibration captures actual current joints/TF, computes the configured pen tip in `base_link`, validates board side lengths/orthogonality and optional PXY, and accepts only right-handed orthonormal transforms. Publish `base_link` → `grid_frame`; publish a right-handed rotated `game_origin_frame`. Store missing/invalid data as not ready. The gripper fitting GUI cannot supply `tool_to_pen_tip`.
+Calibration captures actual current joints/TF and computes the pen tip from the configured `tool0` translation `[0, 0, 0.315]` m. It stores P0/PX/PY as pen-tip points in `base_link`, validates board side lengths/orthogonality and optional PXY, and accepts only right-handed orthonormal transforms. Publish `base_link` → `grid_frame`; publish a right-handed rotated `game_origin_frame`. Store missing/invalid data as not ready. Pen-tip orientation is unnecessary for three-point calibration, and the gripper fitting GUI is not a calibration authority.
 
-Retain MoveIt's `world` planning frame, `ur_manipulator` group and `tool0` endpoint. Convert calibrated board targets explicitly. For a future commissioned task TCP:
+Retain MoveIt's `world` planning frame, `ur_manipulator` group and `tool0` endpoint. Author and persist every application Cartesian target with the explicit frame `base_link`, then transform it into MoveIt's internal frame at the motion boundary. The approved application TCP is `cube_grasp_tcp`, parent `tool0`, translation `[0, 0, 0.275]` m. Its orientation preserves the reviewed tooling orientation (`rpy [0, 0, -0.7853981633974483]`) until separately commissioned. Compute targets as:
 
 ```text
-T_world_tool0_target = T_world_task_tcp_target * inverse(T_tool0_task_tcp)
+T_world_cube_tcp_target = T_world_base_link * T_base_link_cube_tcp_target
+T_world_tool0_target = T_world_cube_tcp_target * inverse(T_tool0_cube_grasp_tcp)
 ```
 
-Do not assume the existing tactile-reference `grasp_tcp` is the cube TCP. Capture/validate its replacement or application offset during commissioning; do not change the SRDF endpoint merely to make a plan pass. Taught home/safe are actual captured joint states, not copies of SRDF `home`.
+Keep the existing tactile-reference `grasp_tcp` unchanged; it is a reusable workcell frame, not the application cube TCP. Do not change the SRDF endpoint merely to make a plan pass. Taught Cartesian destinations must identify `base_link`; taught home/safe are actual captured joint states, not copies of SRDF `home`.
 
 Later, `robots_and_cubes_motion` uses MoveIt C++ planning/execution APIs and the existing scaled controller mapping. Phase 7 should add a reviewed, opt-in application pipeline profile to the existing MoveIt integration, enabling installed Pilz `CommandPlanner` with commissioned Cartesian/joint limits. Normal workcell defaults remain unchanged. Use explicit PTP transit and LIN descent/lift/release. Phase 9 requests existing `RRTstarkConfigDefault` in `ompl` only for suitable free-space fallback; never replace required LIN segments with arbitrary sampling paths.
 
@@ -172,7 +173,7 @@ Application scene ownership covers board, origin, cubes, destinations and fixed 
 |---|---|
 | RRT* is current primary; spec wants Pilz primary | Opt-in application planning profile in Phase 7; fallback in Phase 9 |
 | `world`, `base_link`, `base` differ | Explicit TF conversion and frame-tagged models; no frame renaming |
-| Current TCP is tactile-reference; pen/cube TCP unknown | Required commissioning fields, unset until measured |
+| Existing `grasp_tcp` is a tactile reference | Keep it unchanged; use configured `cube_grasp_tcp` at `[0, 0, 0.275]` m and pen tip at `[0, 0, 0.315]` m from `tool0` |
 | Existing mock switch leaves peripherals enabled | New application mock with no hardware includes or command clients |
 | Default 90 mm pitch / 60 mm cubes leave 30 mm gaps | Do not certify adjacency; commission with actual gripper or disable adjacent layouts |
 | Reachable reward placement versus safe child retrieval | Commission a delivery/access arrangement; prompt retrieval only after release/retreat and safe access conditions |
@@ -187,8 +188,8 @@ Application scene ownership covers board, origin, cubes, destinations and fixed 
 |---|---|
 | 1 — this change | Inventory and plan only; audit review before further work |
 | 2 — complete | `user_settings.yaml`, `robot_commissioning.yaml`, strict typed loading, board/cube models, exact coordinate math, mode definitions, seeded round generator and hardware-independent state machine |
-| 3 | Remaining application contracts and game ROS boundary; runtime persistence schemas and documentation will be scoped during review |
-| 4 | Grid calibration and teaching; synthetic translated/rotated/noisy/invalid board tests, persistence/invalidation; no automatic robot jogging |
+| 3 — complete | `robots_and_cubes_interfaces`, serialized ROS game-manager boundary, transient complete snapshots, request idempotency, structured execution/reconciliation contracts, runtime schemas and JSONL event records; no executor or hardware client |
+| 4 — complete | Command-free grid calibration and teaching: transactional P0/PX/PY/PXY lifecycle, atomic runtime data, revision invalidation, fresh-state adapters, fixed `grid_frame` ownership, and hardware-free tests |
 | 5 | Mock action executor; full game loop, stage failures, cancellation, idempotent recovery |
 | 6 | Croatian Kid UI + Operator UI/gateway; dynamic answers, localization, lockout, reconnect, setup/calibration/teaching screens |
 | 7 | Opt-in Pilz motion and trajectory policy; offline/plan-only checks before supervised execution |
@@ -209,3 +210,53 @@ Implemented under `ur5_ws/src/labus/robots_and_cubes/`:
 This phase deliberately contains no ROS node, frontend, runtime calibration,
 MoveIt profile, driver/gripper client, or execution path. Further work requires
 the next reviewed scope.
+
+## 11. Phase 3 delivery boundary
+
+Phase 3 adds `robots_and_cubes_interfaces` and a ROS-facing game-manager
+adapter around the unchanged pure core. `ExecutePickPlace` carries only the
+requested operation and revisions; it does not encode whether a child was
+correct. The manager publishes a complete, transient-local snapshot and offers
+an explicit fetch service for reconnecting clients. It serializes request IDs,
+rejects stale round IDs and locked-state selections, and dispatches at most one
+operation at a time.
+
+Wrong attempts are committed only after `SUCCEEDED`. Failed or canceled
+operations preserve the round, selection, attempts, and operation identity.
+Results report physical progress; an operation that may have grasped,
+transported, or released a cube requires an explicit operator reconciliation
+before retry. The current adapter defines these contracts but provides no motion
+executor, mock executor, calibration capture, browser gateway, or hardware
+bringup.
+
+`robots_and_cubes_config.runtime` now supplies versioned typed runtime-data
+schemas for future calibration, taught poses, and event records. The empty
+`runtime_data/` directory ignores generated operator data. See
+[ros_application_contracts.md](ros_application_contracts.md) for the exact
+action, messages, services, snapshot, idempotency, and recovery semantics.
+
+Focused contract/unit coverage is hardware-free. ROS graph integration testing
+is deferred because the audit environment previously denied loopback/DDS socket
+creation; no test is weakened to work around that restriction. It must use an
+isolated domain and fake action endpoint in a suitable environment before a
+future gateway or executor phase.
+
+## 12. Phase 4 delivery boundary
+
+`robots_and_cubes_calibration` now owns pure right-handed calibration geometry,
+transactional candidate/acceptance lifecycle, atomic accepted-data persistence,
+invalidation checks, and command-free teaching. Its narrow adapter reads only
+fresh measured TF/joint state through injectable providers. It is the single
+application owner of the fixed `base_link -> grid_frame` publication after an
+accepted calibration. `robots_and_cubes_interfaces` adds logical calibration
+and teaching contracts with request IDs; none carries robot or gripper commands.
+
+Accepted calibration retains P0/PX/PY, optional PXY, transform, metrics,
+configuration/pen revisions, timestamps, and identity in
+`runtime_data/calibration.yaml`. Taught home/safe are measured six-joint
+states; destinations are frame-tagged `base_link` records in
+`runtime_data/taught_poses.yaml`, including red slots or a bin. The explicit
+Beginner policy maps `BEGINNER_CORRECT` to the configured `green_reward` or
+`beginner_demo` logical destination. Cube TCP translation is `[0, 0, 0.275]` m
+and pen-tip translation is `[0, 0, 0.315]` m from `tool0`; cube TCP orientation
+remains provisional and uncommissioned.

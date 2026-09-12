@@ -44,10 +44,18 @@ def test_default_user_settings_load():
 
 def test_default_commissioning_loads_but_is_not_execution_ready():
     settings = load_robot_commissioning(ROBOT_CONFIG)
-    assert settings.robot.base_frame == 'base_link'
-    assert settings.robot.planning_frame == 'world'
+    assert settings.frames.task_reference_frame == 'base_link'
+    assert settings.frames.moveit_planning_frame == 'world'
     assert settings.robot.planning_group == 'ur_manipulator'
     assert settings.robot.planning_end_link == 'tool0'
+    assert settings.task_tcp.frame_name == 'cube_grasp_tcp'
+    assert settings.task_tcp.parent_frame == 'tool0'
+    assert settings.task_tcp.translation_m == (0.0, 0.0, 0.275)
+    assert settings.task_tcp.orientation_rpy_rad == (
+        0.0, 0.0, -0.7853981633974483
+    )
+    assert settings.calibration_pen.parent_frame == 'tool0'
+    assert settings.calibration_pen.tip_translation_m == (0.0, 0.0, 0.315)
     assert settings.motion.fallback_planner_id == 'RRTstarkConfigDefault'
     assert settings.gripper.command_action == '/robotiq_3f/gripper_command'
     assert settings.gripper.status_topic == '/robotiq_3f/status'
@@ -147,15 +155,10 @@ def test_touchscreen_answer_limit_is_enforced(tmp_path):
         load_user_settings(_write(tmp_path, data))
 
 
-def test_commissioned_transform_and_limits_are_validated(tmp_path):
+def test_commissioned_limits_are_validated(tmp_path):
     data = yaml.safe_load(ROBOT_CONFIG.read_text(encoding='utf-8'))
     data['motion'].update({
         'primary_pipeline': 'pilz_industrial_motion_planner',
-        'task_tcp_frame': 'cube_tcp',
-        'tool_to_pen_tip': {
-            'translation_m': [0.0, 0.0, 0.1],
-            'rotation_xyzw': [0.0, 0.0, 0.0, 1.0],
-        },
         'allowed_joint_ranges_rad': {'joint_a': [-1.0, 1.0]},
         'maximum_joint_excursion_rad': {'joint_a': 0.5},
         'default_grasp_yaw_deg': 0.0,
@@ -169,6 +172,30 @@ def test_commissioned_transform_and_limits_are_validated(tmp_path):
     assert settings.real_execution_ready
 
     bad = deepcopy(data)
-    bad['motion']['tool_to_pen_tip']['rotation_xyzw'] = [0, 0, 0, 2]
-    with pytest.raises(ConfigError, match='unit quaternion'):
+    bad['motion']['allowed_joint_ranges_rad']['joint_a'] = [1.0, -1.0]
+    with pytest.raises(ConfigError, match='minimum must be below maximum'):
         load_robot_commissioning(_write(tmp_path, bad))
+
+
+@pytest.mark.parametrize(
+    ('section', 'field', 'value'),
+    [
+        ('task_tcp', 'translation_m', [0.0, 0.0]),
+        ('task_tcp', 'orientation_rpy_rad', [0.0, float('nan'), 0.0]),
+        ('calibration_pen', 'tip_translation_m', [0.0, 0.315]),
+    ],
+)
+def test_application_geometry_requires_finite_three_vectors(
+    tmp_path, section, field, value
+):
+    data = yaml.safe_load(ROBOT_CONFIG.read_text(encoding='utf-8'))
+    data[section][field] = value
+    with pytest.raises(ConfigError, match='must contain 3|finite number'):
+        load_robot_commissioning(_write(tmp_path, data))
+
+
+def test_legacy_nullable_tcp_fields_are_rejected(tmp_path):
+    data = yaml.safe_load(ROBOT_CONFIG.read_text(encoding='utf-8'))
+    data['motion']['task_tcp_frame'] = None
+    with pytest.raises(ConfigError, match='motion unknown: task_tcp_frame'):
+        load_robot_commissioning(_write(tmp_path, data))

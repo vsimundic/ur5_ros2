@@ -1,0 +1,7 @@
+string request_id
+string round_id
+string operation_id
+---
+bool accepted
+robots_and_cubes_interfaces/ErrorSummary error
+robots_and_cubes_interfaces/GameStateSnapshot snapshot

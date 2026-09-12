@@ -56,13 +56,15 @@ No Robots and Cubes packages, game core, board calibration, taught-position mana
 | ROS robot base | **`base_link`**, empty default `tf_prefix` | Description wrappers and SRDF |
 | Controller-coordinate base | `base`, yaw pi from `base_link` | `/opt/ros/jazzy/share/ur_description/urdf/ur_macro.xacro` |
 | MoveIt planning/model frame | **`world`** | Offline `moveit::core::RobotModel::getModelFrame()` on expanded authoritative URDF/SRDF |
+| Application task reference | **`base_link`** (user-approved after audit) | `config/robot_commissioning.yaml` |
 | Planning group | **`ur_manipulator`** | MoveIt `config/ur5_workcell.srdf` |
 | Planning chain / endpoint | `base_link` → **`tool0`**, six arm joints | Same SRDF; no declared SRDF end-effector group |
 | Description TCP | **`grasp_tcp`**, fixed child of `tool0` | Description `urdf/ur5_workcell_macro.xacro` |
 | Pendant-selected TCP | **Unknown offline** | Official broadcaster config describes `base` → `tool0_controller`; no current pendant TCP recorded |
-| Game frames / pen | `grid_frame`, `game_origin_frame`, pen-tip transform absent | No application calibration/frame configuration found |
+| Application cube TCP | **`cube_grasp_tcp`**, `tool0` translation `[0, 0, 0.275]` m, reviewed tooling orientation retained | User-approved after audit; `config/robot_commissioning.yaml` |
+| Calibration pen | `tool0` tip translation **`[0, 0, 0.315]` m**; sampled points stored in `base_link` | User-approved after audit; `config/robot_commissioning.yaml` |
 
-`tool0` → `grasp_tcp`: xyz `[-0.05091168824543142, 0.05091168824543142, 0.275]` m; rpy `[0, 0, -0.7853981633974483]` rad. The source identifies a Basic/open tactile outer-edge reference, not a commissioned cube pinch center. This fixed TCP does not follow tactile articulation. `tool0` is UR's all-zero tool frame; neither frame establishes the pendant TCP setting.
+`tool0` → reusable `grasp_tcp`: xyz `[-0.05091168824543142, 0.05091168824543142, 0.275]` m; rpy `[0, 0, -0.7853981633974483]` rad. The source identifies a Basic/open tactile outer-edge reference and remains unchanged. The application-specific `cube_grasp_tcp` instead uses zero X/Y and the approved 0.275 m Z while retaining that reviewed orientation in application configuration. `tool0` is UR's all-zero tool frame; neither application setting establishes the pendant-selected TCP.
 
 Current wrappers use `world` → `workcell_reference` (identity) → `base_link` (yaw pi). The table attaches to `workcell_reference`: size 0.9 × 1.5 × 0.9 m, center `[0, -0.54, -0.45]` m in that frame; mounting-edge offset 0.21 m. Those table coordinates must not be treated as `base_link` coordinates. Expanded default description: **50 links, 49 joints, 17 movable joints** (six arm, eleven gripper).
 
@@ -227,8 +229,8 @@ Raw colcon aggregation: **127 tests, 1 error, 6 failures, 13 skipped**. This inc
 ## 8. Conflicts, gaps, and unknowns
 
 1. **Planner policy:** spec wants primary Pilz PTP/LIN and RRT* fallback; authoritative configuration currently makes OMPL/RRT* primary. Resolve later in Phase 7; preserve normal workcell defaults.
-2. **Frames:** the spec's `base_link` calibration hierarchy is compatible, but MoveIt uses `world` and controller coordinates use `base`. Explicit transforms are required.
-3. **TCP:** `tool0` and tactile-reference `grasp_tcp` are not a demonstrated cube pinch TCP or pen tip. Pendant TCP, pen transform, grasp Z/orientation, cube-specific opening/force/retention and edge yaw remain unknown.
+2. **Frames:** `base_link` is the authoritative application frame, while MoveIt uses `world` and controller coordinates use `base`. The future motion wrapper must perform explicit transforms and reject untagged/mixed-frame Cartesian data.
+3. **TCP:** application cube and pen translations are resolved in `robot_commissioning.yaml`. The reusable tactile `grasp_tcp` stays unchanged. Pendant-selected TCP, board-relative grasp height, separately commissioned orientation changes, cube-specific opening/force/retention and edge yaw remain unknown.
 4. **Missing application:** configuration tiers, schemas, game/UI, board scene, calibration/teaching/log persistence, preflight, trajectory policy and application mock/plan-only modes do not exist. `use_mock_hardware` only mocks UR; default gripper/FT/camera may still connect unless explicitly disabled.
 5. **Physical commissioning:** board placement/thickness, origin geometry, destinations, taught safe/home, cell reachability, adjacency clearance, approved joint/excursion limits and exhibition speeds are unknown. SRDF `home` is a model state, not an operator-taught safe game pose. Existing collision exclusions do not certify grasp/contact safety.
 6. **Spec ambiguities:** user-level default yaw overlaps advanced yaw/cell files; precedence needs definition. Reward placement must be robot-reachable while retrieval must be outside the active area after retreat. Beginner correctness is color-independent, but correct-cube destination is not explicit. None requires inventing physical values in Phase 2.

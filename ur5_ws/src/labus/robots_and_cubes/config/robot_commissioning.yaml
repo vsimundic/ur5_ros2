@@ -1,20 +1,32 @@
 # ADVANCED — change only during robot commissioning.
-# Null values are intentional: real execution must remain unavailable until
-# these physical limits and transforms have been measured and approved.
+# Approved application geometry is authoritative here. Remaining null values
+# intentionally keep real execution unavailable until commissioning completes.
 schema_version: 1
 
+frames:
+  task_reference_frame: base_link
+  moveit_planning_frame: world
+
 robot:
-  base_frame: base_link
-  planning_frame: world
   planning_group: ur_manipulator
   planning_end_link: tool0
+
+task_tcp:
+  frame_name: cube_grasp_tcp
+  parent_frame: tool0
+  translation_m: [0.0, 0.0, 0.275]
+  # Provisional only: this tooling orientation is not physically commissioned
+  # for cube pinch motion. Its presence never makes real motion ready.
+  orientation_rpy_rad: [0.0, 0.0, -0.7853981633974483]
+
+calibration_pen:
+  parent_frame: tool0
+  tip_translation_m: [0.0, 0.0, 0.315]
 
 motion:
   primary_pipeline: null
   fallback_pipeline: null
   fallback_planner_id: RRTstarkConfigDefault
-  task_tcp_frame: null
-  tool_to_pen_tip: null
   allowed_joint_ranges_rad: null
   maximum_joint_excursion_rad: null
   default_grasp_yaw_deg: null

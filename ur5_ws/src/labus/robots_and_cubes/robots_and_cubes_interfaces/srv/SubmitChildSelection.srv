@@ -1,0 +1,8 @@
+string request_id
+string round_id
+string cube_id
+---
+bool accepted
+bool requires_motion
+robots_and_cubes_interfaces/ErrorSummary error
+robots_and_cubes_interfaces/GameStateSnapshot snapshot

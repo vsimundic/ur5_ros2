@@ -1,6 +1,6 @@
 """Explicit game state machine, independent of robot execution."""
 
-from enum import Enum
+from enum import Enum, IntEnum
 from typing import Optional
 
 from .models import GameMode, GameRound
@@ -31,6 +31,16 @@ class SelectionDisposition(str, Enum):
     EXECUTION_REQUIRED = 'execution_required'
 
 
+class PhysicalProgress(IntEnum):
+    """Most advanced physical effect reported for a failed operation."""
+
+    NOT_STARTED = 0
+    PLANNING = 1
+    MAY_HAVE_GRASPED = 2
+    MAY_HAVE_TRANSPORTED = 3
+    MAY_HAVE_RELEASED = 4
+
+
 class InvalidTransition(RuntimeError):
     """The requested event is not valid in the current state."""
 
@@ -46,6 +56,8 @@ class GameStateMachine:
         self.selected_answers: set[str] = set()
         self.removed_cubes: set[str] = set()
         self.pending_cube_id: Optional[str] = None
+        self.pending_operation_id: Optional[str] = None
+        self.physical_progress = PhysicalProgress.NOT_STARTED
         self.last_robot_error: Optional[str] = None
 
     def ready(self) -> None:
@@ -77,6 +89,8 @@ class GameStateMachine:
         self.selected_answers.clear()
         self.removed_cubes.clear()
         self.pending_cube_id = None
+        self.pending_operation_id = None
+        self.physical_progress = PhysicalProgress.NOT_STARTED
         self.last_robot_error = None
         self.state = GameState.ROUND_GENERATED
 
@@ -99,7 +113,9 @@ class GameStateMachine:
             self.last_robot_error = error
             self.state = GameState.ROBOT_ERROR
 
-    def submit_selection(self, cube_id: str) -> SelectionDisposition:
+    def submit_selection(
+        self, cube_id: str, operation_id: Optional[str] = None
+    ) -> SelectionDisposition:
         """Accept one available child selection and lock input if needed."""
         self._require(GameState.WAITING_FOR_CHILD)
         game_round = self._round()
@@ -109,22 +125,34 @@ class GameStateMachine:
         if game_round.mode is GameMode.EASY and not game_round.is_correct(cube_id):
             return SelectionDisposition.EASY_HINT
         self.pending_cube_id = cube.cube_id
+        self.pending_operation_id = operation_id
+        self.physical_progress = PhysicalProgress.NOT_STARTED
         self.state = GameState.EXECUTING_SELECTION
         return SelectionDisposition.EXECUTION_REQUIRED
 
-    def complete_motion(self, succeeded: bool, error: str = 'ROBOT_OPERATION_FAILED') -> None:
+    def complete_motion(
+        self,
+        succeeded: bool,
+        error: str = 'ROBOT_OPERATION_FAILED',
+        physical_progress: PhysicalProgress = PhysicalProgress.NOT_STARTED,
+    ) -> None:
         """Apply an execution result separately from game correctness."""
         self._require(GameState.EXECUTING_SELECTION)
         game_round = self._round()
         cube_id = self._pending()
         if not succeeded:
+            if not isinstance(physical_progress, PhysicalProgress):
+                raise TypeError('physical_progress must be PhysicalProgress')
             self.last_robot_error = error
+            self.physical_progress = physical_progress
             self.state = GameState.ROBOT_ERROR
             return
 
         self.selected_answers.add(cube_id)
         self.removed_cubes.add(cube_id)
         self.pending_cube_id = None
+        self.pending_operation_id = None
+        self.physical_progress = PhysicalProgress.NOT_STARTED
         self.last_robot_error = None
         if game_round.is_correct(cube_id):
             self.state = GameState.SUCCESS
@@ -141,8 +169,18 @@ class GameStateMachine:
         self._require(GameState.ROBOT_ERROR)
         if self.pending_cube_id is None:
             raise InvalidTransition('there is no failed selection to retry')
+        if self.physical_progress >= PhysicalProgress.MAY_HAVE_GRASPED:
+            raise InvalidTransition('operator reconciliation is required before retry')
         self.last_robot_error = None
         self.state = GameState.EXECUTING_SELECTION
+
+    def confirm_retry_safe_after_reconciliation(self) -> None:
+        """Allow retry only after an operator confirms no physical change remains."""
+        self._require(GameState.ROBOT_ERROR)
+        self._pending()
+        if self.physical_progress < PhysicalProgress.MAY_HAVE_GRASPED:
+            raise InvalidTransition('reconciliation is not required for this operation')
+        self.physical_progress = PhysicalProgress.NOT_STARTED
 
     def begin_abort(self) -> None:
         """Enter aborting from any active application workflow."""
@@ -158,6 +196,8 @@ class GameStateMachine:
         self.selected_answers.clear()
         self.removed_cubes.clear()
         self.pending_cube_id = None
+        self.pending_operation_id = None
+        self.physical_progress = PhysicalProgress.NOT_STARTED
         self.last_robot_error = None
         self.state = GameState.IDLE
 

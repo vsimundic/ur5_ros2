@@ -279,6 +279,9 @@ config/robot_commissioning.yaml
 
 Contains values such as:
 
+- authoritative application and MoveIt frame identifiers;
+- the application cube-pinch TCP relative to `tool0`;
+- the calibration pen-tip translation relative to `tool0`;
 - allowed game joint ranges;
 - cell-specific grasp-yaw overrides;
 - trajectory excursion limits;
@@ -587,6 +590,12 @@ Left-handed rounds can be disabled through configuration.
 
 All ROS TF frames must remain valid right-handed frames.
 
+All application task geometry and Cartesian targets are authored and stored in
+`base_link`. Every stored Cartesian pose must carry its frame identifier. Do
+not mix `world`, `base`, and `base_link` implicitly. MoveIt may retain `world`
+as its internal model/planning frame; the motion layer must explicitly
+transform each `base_link` target when MoveIt requires another frame.
+
 Expected hierarchy:
 
 ```text
@@ -726,15 +735,18 @@ The operator has a removable pen.
 
 The pen is mounted repeatably to the robot.
 
-Its pen-tip transform relative to the configured tool/TCP is known.
-
-Store:
+Its tip position relative to `tool0` is known:
 
 ```text
-tool_to_pen_tip
+tool0 -> pen_tip = [0.0, 0.0, 0.315] m
 ```
 
-in configuration.
+Store the parent frame and translation in advanced application configuration.
+Pen-tip orientation is not required for three-point board calibration. For P0,
+PX, and PY, compose the measured `tool0` pose in `base_link` with this
+translation and store the resulting pen-tip point in `base_link`.
+
+Do not use the cube-pinch TCP to capture board calibration points.
 
 ---
 
@@ -1049,6 +1061,10 @@ On correct answer:
 
 - robot picks the selected correct cube;
 - display Croatian success.
+
+Beginner correctness is location-based. `BEGINNER_CORRECT` must map through an
+explicit configured logical destination (`green_reward` or `beginner_demo`);
+do not derive that destination from the cube colour.
 
 ---
 
@@ -1528,6 +1544,18 @@ Do not hardcode.
 ---
 
 # 46. Grasp orientation
+
+The application cube-pinch TCP is `cube_grasp_tcp`, relative to `tool0`:
+
+```text
+translation = [0.0, 0.0, 0.275] m
+```
+
+Its X and Y offsets are zero so it lies on the tool center axis. Preserve the
+currently reviewed tooling orientation in application configuration until a
+separate orientation is physically commissioned; it is provisional and does
+not make real motion ready. Do not modify the reusable
+workcell's tactile/reference `grasp_tcp` for this application setting.
 
 Default:
 

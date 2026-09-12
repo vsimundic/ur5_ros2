@@ -6,6 +6,7 @@ from robots_and_cubes_game.state_machine import (
     GameState,
     GameStateMachine,
     InvalidTransition,
+    PhysicalProgress,
     SelectionDisposition,
 )
 
@@ -84,6 +85,19 @@ def test_robot_failure_preserves_attempt_and_supports_retry(settings):
     machine.complete_motion(True)
     assert machine.state is GameState.WAITING_FOR_CHILD
     assert machine.attempts_remaining == 1
+
+
+def test_partial_motion_failure_requires_reconciliation_before_retry(settings):
+    machine = _waiting_machine(settings)
+    machine.submit_selection(_cube_id(machine, False), 'operation-1')
+    machine.complete_motion(
+        False, 'EXECUTION_FAILED', PhysicalProgress.MAY_HAVE_GRASPED
+    )
+    with pytest.raises(InvalidTransition, match='reconciliation'):
+        machine.retry_motion()
+    machine.confirm_retry_safe_after_reconciliation()
+    machine.retry_motion()
+    assert machine.state is GameState.EXECUTING_SELECTION
 
 
 def test_easy_wrong_selection_has_no_motion_or_attempt_cost(settings):

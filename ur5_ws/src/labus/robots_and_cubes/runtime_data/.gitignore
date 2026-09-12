@@ -1,0 +1,4 @@
+# Runtime calibration, taught poses, and event logs are operator data.
+*
+!.gitignore
+!README.md

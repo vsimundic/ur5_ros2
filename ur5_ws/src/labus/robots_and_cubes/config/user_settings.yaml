@@ -38,3 +38,14 @@ generation:
 
 mock:
   movement_duration_seconds: 2.0
+
+calibration:
+  maximum_side_length_error_m: 0.005
+  maximum_angle_error_deg: 1.0
+  minimum_vector_length_m: 0.001
+  maximum_capture_age_seconds: 0.5
+  maximum_fourth_point_error_m: 0.007
+  maximum_taught_state_age_seconds: 0.5
+
+teaching:
+  beginner_correct_destination: green_reward

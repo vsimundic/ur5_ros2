@@ -1,0 +1,29 @@
+string request_id
+string round_id
+string cube_id
+int32 grid_column
+int32 grid_row
+string destination_id
+string destination_policy
+string configuration_revision
+string calibration_revision
+---
+uint8 SUCCEEDED=0
+uint8 CANCELED=1
+uint8 FAILED=2
+
+uint8 outcome
+robots_and_cubes_interfaces/ErrorSummary error
+uint8 physical_progress
+---
+uint8 PLANNING=0
+uint8 MOVING_TO_PREGRASP=1
+uint8 DESCENDING=2
+uint8 GRASPING=3
+uint8 LIFTING=4
+uint8 MOVING_TO_DESTINATION=5
+uint8 RELEASING=6
+uint8 RETREATING=7
+
+uint8 stage
+string detail
