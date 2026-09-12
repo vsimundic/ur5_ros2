@@ -1,0 +1,40 @@
+schema_version: 1
+
+application:
+  name: "Robots and Cubes"
+
+game:
+  enabled_modes: [easy, beginner, standard, challenge]
+  attempts: 2
+  cubes:
+    red_count: 4
+    green_count: 1
+  standard:
+    central_origin_margin_cells: 1
+  challenge:
+    rotations_deg: [0, 90, 180, 270]
+    enable_left_handed: true
+
+board:
+  rows: 6
+  columns: 6
+  cell_size_m: 0.09
+
+cube:
+  size_m:
+    x: 0.06
+    y: 0.06
+    z: 0.06
+
+generation:
+  allow_adjacent_cubes: true
+  minimum_cell_distance: 1
+  favor_coordinate_sign_variety: true
+  require_positive_x: false
+  require_negative_x: false
+  require_positive_y: false
+  require_negative_y: false
+  maximum_attempts: 1000
+
+mock:
+  movement_duration_seconds: 2.0

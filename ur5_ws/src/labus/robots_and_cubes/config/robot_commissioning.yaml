@@ -1,0 +1,27 @@
+# ADVANCED — change only during robot commissioning.
+# Null values are intentional: real execution must remain unavailable until
+# these physical limits and transforms have been measured and approved.
+schema_version: 1
+
+robot:
+  base_frame: base_link
+  planning_frame: world
+  planning_group: ur_manipulator
+  planning_end_link: tool0
+
+motion:
+  primary_pipeline: null
+  fallback_pipeline: null
+  fallback_planner_id: RRTstarkConfigDefault
+  task_tcp_frame: null
+  tool_to_pen_tip: null
+  allowed_joint_ranges_rad: null
+  maximum_joint_excursion_rad: null
+  default_grasp_yaw_deg: null
+
+gripper:
+  command_action: /robotiq_3f/gripper_command
+  status_topic: /robotiq_3f/status
+  open_position_m: null
+  cube_close_position_m: null
+  cube_effort_n: null
