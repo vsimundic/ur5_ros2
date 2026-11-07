@@ -6,3 +6,14 @@ models/
 __pycache__/
 *.py[cod]
 .agents/
+
+# Generated application artifacts may remain after switching to master.
+node_modules/
+dist/
+*.tsbuildinfo
+.pytest_cache/
+
+# Preserve local Robots and Cubes operator data across branch switches.
+/ur5_ws/src/labus/robots_and_cubes/runtime_data/*
+!/ur5_ws/src/labus/robots_and_cubes/runtime_data/.gitignore
+!/ur5_ws/src/labus/robots_and_cubes/runtime_data/README.md
